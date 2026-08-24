@@ -1,6 +1,9 @@
 import os
+import io
 import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
@@ -81,7 +84,6 @@ def get_detail_sheet_structure(sheet_name: str):
             return str(v).strip() if v is not None else ""
         return ""
 
-    # Parse Header & Metadata
     metadata = {
         "sheet_name": sheet_name,
         "project_title": "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT",
@@ -97,7 +99,6 @@ def get_detail_sheet_structure(sheet_name: str):
         "proposed_width_m": "4.5"
     }
 
-    # Parse Transport Distances
     transport_distances = [
         {"material": "Fine Aggregate", "distance_km": float(val(14, 6)) if val(14, 6).replace('.', '', 1).isdigit() else 25.0, "unit": "km"},
         {"material": "Coarse Aggregate", "distance_km": float(val(14, 9)) if val(14, 9).replace('.', '', 1).isdigit() else 25.0, "unit": "km"},
@@ -107,14 +108,12 @@ def get_detail_sheet_structure(sheet_name: str):
         {"material": "Soil / Borrow Material", "distance_km": float(val(15, 12)) if val(15, 12).replace('.', '', 1).isdigit() else 25.0, "unit": "km"}
     ]
 
-    # Surface Breakdown
     surfaces = [
         {"type": "Gravel Section", "length_m": 850, "avg_width_m": 3.5, "proposed_width_m": 4.5, "area_sqm": 3825},
         {"type": "Macadam / DBST / Tar Surface Section", "length_m": 2400, "avg_width_m": 4.0, "proposed_width_m": 4.5, "area_sqm": 10800},
         {"type": "Concrete Surface Section", "length_m": 950, "avg_width_m": 4.5, "proposed_width_m": 4.5, "area_sqm": 4275}
     ]
 
-    # Parse Exact Category Headers and Sub-Item Measurements from Detail Sheet
     items = []
     for idx in range(23, len(rows)):
         r = rows[idx]
@@ -150,7 +149,7 @@ def get_detail_sheet_structure(sheet_name: str):
         "transport_distances": transport_distances,
         "surfaces": surfaces,
         "total_sscm_items": len(items),
-        "items": items[:60]  # Return first 60 rows for clean performance
+        "items": items[:60]
     }
 
 class DetailSheetCreateRequest(BaseModel):
@@ -171,6 +170,144 @@ def create_detail_sheet(req: DetailSheetCreateRequest):
         "road_name": req.road_name,
         "contract_no": req.contract_no
     }
+
+class ExportItem(BaseModel):
+    item_no: Optional[str] = ""
+    description: Optional[str] = ""
+    unit: Optional[str] = ""
+    is_header: bool = False
+    gravel_lhs: Optional[float] = 0.0
+    gravel_rhs: Optional[float] = 0.0
+    asphalt_lhs: Optional[float] = 0.0
+    asphalt_rhs: Optional[float] = 0.0
+    concrete_lhs: Optional[float] = 0.0
+    concrete_rhs: Optional[float] = 0.0
+    interlock_lhs: Optional[float] = 0.0
+    interlock_rhs: Optional[float] = 0.0
+
+class ExportDetailSheetRequest(BaseModel):
+    sheet_name: str
+    metadata: Optional[Dict[str, Any]] = {}
+    transport_distances: Optional[List[Dict[str, Any]]] = []
+    items: List[ExportItem]
+
+@app.post("/api/detail-sheet/export")
+def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = req.sheet_name or "Detail -1"
+    
+    title_font = Font(name="Calibri", size=14, bold=True, color="1E3A8A")
+    sec_font = Font(name="Calibri", size=11, bold=True, color="1E293B")
+    header_bg = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    yellow_font = Font(name="Calibri", size=11, bold=True, color="000000")
+    thin_border = Border(
+        left=Side(style='thin', color='D1D5DB'),
+        right=Side(style='thin', color='D1D5DB'),
+        top=Side(style='thin', color='D1D5DB'),
+        bottom=Side(style='thin', color='D1D5DB')
+    )
+    
+    # Title Banner
+    ws.merge_cells('A1:L1')
+    ws['A1'] = "ROAD DEVELOPMENT AUTHORITY - SRI LANKA"
+    ws['A1'].font = title_font
+    ws['A1'].alignment = Alignment(horizontal="center")
+    
+    ws.merge_cells('A2:L2')
+    ws['A2'] = f"DETAIL DATA SHEET & MEASUREMENT COMPUTATION ({req.sheet_name})"
+    ws['A2'].font = sec_font
+    ws['A2'].alignment = Alignment(horizontal="center")
+
+    # Section 1 Metadata
+    ws['A4'] = "SECTION 1: GENERAL PROJECT DATA SHEET"
+    ws['A4'].font = sec_font
+    
+    meta = req.metadata or {}
+    ws['A5'] = "Project Title:"
+    ws['B5'] = meta.get("project_title", "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT")
+    ws['A6'] = "Contract No:"
+    ws['B6'] = meta.get("contract_no", "RDA/DC/DRP/SLOPE/CP/KDY/KDY/PACKAGE 17A")
+    ws['A7'] = "Province:"
+    ws['B7'] = meta.get("province", "Central")
+    ws['D7'] = "District:"
+    ws['E7'] = meta.get("district", "Kandy")
+    ws['A8'] = "EE Division:"
+    ws['B8'] = meta.get("ee_division", "Kandy EE")
+    ws['D8'] = "CE Division:"
+    ws['E8'] = meta.get("ce_division", "Kandy CE")
+    ws['A9'] = "Road Length (km):"
+    ws['B9'] = meta.get("road_length_km", "4.2")
+    ws['D9'] = "Proposed Width (m):"
+    ws['E9'] = meta.get("proposed_width_m", "4.5")
+
+    # Section 3 Table Headers
+    ws.cell(row=12, column=1, value="SSCM Item & Description")
+    ws.merge_cells("A12:C12")
+    ws.cell(row=12, column=4, value="1. Gravel Section").fill = PatternFill(start_color="FDE68A", end_color="FDE68A", fill_type="solid")
+    ws.merge_cells("D12:E12")
+    ws.cell(row=12, column=6, value="2. AC / Macadam / Tar Surface").fill = PatternFill(start_color="BFDBFE", end_color="BFDBFE", fill_type="solid")
+    ws.merge_cells("F12:G12")
+    ws.cell(row=12, column=8, value="3. Concrete Surface Section").fill = PatternFill(start_color="E9D5FF", end_color="E9D5FF", fill_type="solid")
+    ws.merge_cells("H12:I12")
+    ws.cell(row=12, column=10, value="4. Interlock Paved Section").fill = PatternFill(start_color="A7F3D0", end_color="A7F3D0", fill_type="solid")
+    ws.merge_cells("J12:K12")
+    ws.cell(row=12, column=12, value="Grand Total (Qty)")
+    
+    headers_row2 = ["Item", "Description of Work", "Unit", "LHS", "RHS", "LHS", "RHS", "LHS", "RHS", "LHS", "RHS", "Total Qty"]
+    for col_idx, text in enumerate(headers_row2, 1):
+        cell = ws.cell(row=13, column=col_idx, value=text)
+        cell.fill = header_bg
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    curr_row = 14
+    for it in req.items:
+        if it.is_header:
+            cell_item = ws.cell(row=curr_row, column=1, value=it.item_no)
+            cell_item.fill = yellow_fill
+            cell_item.font = yellow_font
+            
+            cell_desc = ws.cell(row=curr_row, column=2, value=it.description)
+            cell_desc.fill = yellow_fill
+            cell_desc.font = yellow_font
+            
+            ws.merge_cells(start_row=curr_row, start_column=2, end_row=curr_row, end_column=12)
+        else:
+            ws.cell(row=curr_row, column=1, value=it.item_no).border = thin_border
+            ws.cell(row=curr_row, column=2, value=it.description).border = thin_border
+            ws.cell(row=curr_row, column=3, value=it.unit).border = thin_border
+            
+            ws.cell(row=curr_row, column=4, value=it.gravel_lhs or 0).border = thin_border
+            ws.cell(row=curr_row, column=5, value=it.gravel_rhs or 0).border = thin_border
+            
+            ws.cell(row=curr_row, column=6, value=it.asphalt_lhs or 0).border = thin_border
+            ws.cell(row=curr_row, column=7, value=it.asphalt_rhs or 0).border = thin_border
+            
+            ws.cell(row=curr_row, column=8, value=it.concrete_lhs or 0).border = thin_border
+            ws.cell(row=curr_row, column=9, value=it.concrete_rhs or 0).border = thin_border
+            
+            ws.cell(row=curr_row, column=10, value=it.interlock_lhs or 0).border = thin_border
+            ws.cell(row=curr_row, column=11, value=it.interlock_rhs or 0).border = thin_border
+            
+            tot_cell = ws.cell(row=curr_row, column=12, value=f"=SUM(D{curr_row}:K{curr_row})")
+            tot_cell.font = Font(bold=True, color="D97706")
+            tot_cell.border = thin_border
+
+        curr_row += 1
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"RDA_Detail_Sheet_{req.sheet_name.replace(' ', '_')}.xlsx"
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @app.get("/api/road-estimates")
 def get_road_estimates():

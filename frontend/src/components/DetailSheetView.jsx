@@ -12,7 +12,9 @@ import {
   FileText,
   Loader2,
   Eye,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Download,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function DetailSheetView() {
@@ -21,7 +23,9 @@ export default function DetailSheetView() {
   const [sheetData, setSheetData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
 
   // New Detail Sheet Form State
   const [newSheetName, setNewSheetName] = useState('Detail -2');
@@ -135,6 +139,66 @@ export default function DetailSheetView() {
     }
   };
 
+  // SUBMIT & EXPORT TO EXCEL FUNCTION
+  const handleExportToExcel = async () => {
+    setExporting(true);
+    setExportSuccess(false);
+    try {
+      const itemsPayload = (sheetData?.items || []).map(it => {
+        if (it.is_header) {
+          return {
+            item_no: it.item_no,
+            description: it.description,
+            unit: '',
+            is_header: true
+          };
+        }
+        const itemKey = it.item_no + '_' + it.description;
+        const m = itemMeasurements[itemKey] || {};
+        return {
+          item_no: it.item_no,
+          description: it.description,
+          unit: it.unit,
+          is_header: false,
+          gravel_lhs: m.gravel_lhs || 0,
+          gravel_rhs: m.gravel_rhs || 0,
+          asphalt_lhs: m.asphalt_lhs || 0,
+          asphalt_rhs: m.asphalt_rhs || 0,
+          concrete_lhs: m.concrete_lhs || 0,
+          concrete_rhs: m.concrete_rhs || 0,
+          interlock_lhs: m.interlock_lhs || 0,
+          interlock_rhs: m.interlock_rhs || 0
+        };
+      });
+
+      const response = await axios.post('/api/detail-sheet/export', {
+        sheet_name: selectedSheet,
+        metadata: sheetData?.metadata || {},
+        transport_distances: sheetData?.transport_distances || [],
+        items: itemsPayload
+      }, {
+        responseType: 'blob'
+      });
+
+      // Create download link for generated Excel sheet
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `RDA_Detail_Sheet_${selectedSheet.replace(/\s+/g, '_')}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 4000);
+    } catch (err) {
+      console.error('Error exporting detail sheet to Excel:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-64 flex flex-col items-center justify-center space-y-3 text-slate-400">
@@ -149,7 +213,6 @@ export default function DetailSheetView() {
   const surfaces = sheetData?.surfaces || [];
   const items = sheetData?.items || [];
 
-  // Calculate active column count for colSpan on yellow category header rows
   const activeColCount = 3 + 
     (visibleSections.gravel ? 2 : 0) + 
     (visibleSections.asphalt ? 2 : 0) + 
@@ -167,11 +230,35 @@ export default function DetailSheetView() {
               <h2 className="text-xl font-bold text-white">RDA Detail Sheets (Road Data & Quantity Builder)</h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Comprehensive Road Measurement Data Sheet with Yellow Category Banners & 4 Surface Options
+              Comprehensive Road Measurement Data Sheet with Category Headers & Excel Export Engine
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* SUBMIT & EXPORT TO EXCEL BUTTON */}
+            <button 
+              onClick={handleExportToExcel}
+              disabled={exporting}
+              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {exporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                  <span>Generating Excel...</span>
+                </>
+              ) : exportSuccess ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                  <span>Excel Exported!</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Submit & Export to Excel (.xlsx)</span>
+                </>
+              )}
+            </button>
+
             <button 
               onClick={openCreateModal}
               className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
@@ -325,10 +412,10 @@ export default function DetailSheetView() {
           <div>
             <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
               <SlidersHorizontal className="w-4 h-4" />
-              <span>Section 3: SSCM Measurement Matrix (Selectable Surface Sections & Yellow Category Banners)</span>
+              <span>Section 3: SSCM Measurement Matrix (Selectable Surface Sections & Excel Export Engine)</span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Toggle surface sections ON/OFF below to customize entry columns and quickly enter LHS/RHS values
+              Enter values below, then click <span className="text-emerald-400 font-bold">"Submit & Export to Excel"</span> to download your completed Excel sheet
             </p>
           </div>
 
@@ -350,7 +437,6 @@ export default function DetailSheetView() {
             <span>Visible Surface Sections:</span>
           </span>
 
-          {/* Toggle 1: Gravel Section */}
           <button
             onClick={() => toggleSection('gravel')}
             onDoubleClick={() => selectSingleSection('gravel')}
@@ -364,7 +450,6 @@ export default function DetailSheetView() {
             <span>1. Gravel Section</span>
           </button>
 
-          {/* Toggle 2: AC / Tar Surface */}
           <button
             onClick={() => toggleSection('asphalt')}
             onDoubleClick={() => selectSingleSection('asphalt')}
@@ -378,7 +463,6 @@ export default function DetailSheetView() {
             <span>2. AC / Macadam / Tar</span>
           </button>
 
-          {/* Toggle 3: Concrete Surface */}
           <button
             onClick={() => toggleSection('concrete')}
             onDoubleClick={() => selectSingleSection('concrete')}
@@ -392,7 +476,6 @@ export default function DetailSheetView() {
             <span>3. Concrete Surface</span>
           </button>
 
-          {/* Toggle 4: Interlock Section */}
           <button
             onClick={() => toggleSection('interlock')}
             onDoubleClick={() => selectSingleSection('interlock')}
@@ -410,54 +493,46 @@ export default function DetailSheetView() {
         {/* DYNAMIC OPTIONAL SURFACE SECTIONS TABLE MATRIX */}
         <div className="overflow-x-auto rounded-xl border border-slate-800">
           <table className="w-full text-left text-[11px] text-slate-300">
-            {/* Header Row 1: 4 Road Surface Sections */}
             <thead className="bg-slate-900 text-slate-200 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th colSpan={3} className="py-3 px-3 border-r border-slate-800 bg-slate-950 text-amber-400 font-extrabold text-xs">
                   SSCM Item & Description
                 </th>
                 
-                {/* Gravel Section */}
                 {visibleSections.gravel && (
                   <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-amber-500/10 text-amber-400 border-t-2 border-t-amber-500">
                     1. Gravel Section
                   </th>
                 )}
 
-                {/* Tar / Asphalt Surface Section */}
                 {visibleSections.asphalt && (
                   <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-blue-500/10 text-blue-400 border-t-2 border-t-blue-500">
                     2. AC, Macadam, Tar Surface
                   </th>
                 )}
 
-                {/* Concrete Surface Section */}
                 {visibleSections.concrete && (
                   <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-purple-500/10 text-purple-400 border-t-2 border-t-purple-500">
                     3. Concrete Surface Section
                   </th>
                 )}
 
-                {/* Interlock Paved Section */}
                 {visibleSections.interlock && (
                   <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-emerald-500/10 text-emerald-400 border-t-2 border-t-emerald-500">
                     4. Interlock Paved Section
                   </th>
                 )}
 
-                {/* Overall Total Quantity */}
                 <th className="py-2.5 px-3 text-right bg-slate-950 text-amber-400 border-t-2 border-t-amber-400 font-extrabold text-xs">
                   Total (Qty / m)
                 </th>
               </tr>
 
-              {/* Header Row 2: LHS and RHS Sub-Columns */}
               <tr className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-[9px]">
                 <th className="py-2 px-2 w-12 border-r border-slate-800">Item</th>
                 <th className="py-2 px-3 border-r border-slate-800">Description of Work</th>
                 <th className="py-2 px-2 text-center border-r border-slate-800">Unit</th>
 
-                {/* Gravel LHS / RHS */}
                 {visibleSections.gravel && (
                   <>
                     <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-amber-500/5">LHS</th>
@@ -465,7 +540,6 @@ export default function DetailSheetView() {
                   </>
                 )}
 
-                {/* Tar/Asphalt LHS / RHS */}
                 {visibleSections.asphalt && (
                   <>
                     <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-blue-500/5">LHS</th>
@@ -473,7 +547,6 @@ export default function DetailSheetView() {
                   </>
                 )}
 
-                {/* Concrete LHS / RHS */}
                 {visibleSections.concrete && (
                   <>
                     <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-purple-500/5">LHS</th>
@@ -481,7 +554,6 @@ export default function DetailSheetView() {
                   </>
                 )}
 
-                {/* Interlock LHS / RHS */}
                 {visibleSections.interlock && (
                   <>
                     <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-emerald-500/5">LHS</th>
@@ -493,10 +565,8 @@ export default function DetailSheetView() {
               </tr>
             </thead>
 
-            {/* Table Body - Renders Yellow Category Header Rows & Sub-item LHS/RHS Rows */}
             <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
               {items.map((it, idx) => {
-                // RENDER BRIGHT YELLOW CATEGORY HEADER BANNER ROW (EXACTLY AS SHOWN IN USER IMAGE)
                 if (it.is_header) {
                   return (
                     <tr key={idx} className="bg-yellow-400 text-slate-950 font-black border-y-2 border-yellow-500 shadow-sm">
@@ -508,7 +578,6 @@ export default function DetailSheetView() {
                   );
                 }
 
-                // RENDER SUB-ITEM MEASUREMENT ROW WITH DYNAMIC LHS / RHS INPUTS
                 const itemKey = it.item_no + '_' + it.description;
                 const m = itemMeasurements[itemKey] || {
                   gravel_lhs: 0, gravel_rhs: 0,
