@@ -1,0 +1,21 @@
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/npm-debug.log*
+
+# Python / Backend
+backend/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+backend/.venv/
+backend/env/
+backend/venv/
+
+# Environment and IDE
+.env
+.env.local
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
