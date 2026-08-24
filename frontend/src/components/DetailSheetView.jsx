@@ -11,7 +11,6 @@ import {
   Building2,
   FileText,
   Loader2,
-  Check,
   Eye,
   SlidersHorizontal
 } from 'lucide-react';
@@ -59,12 +58,14 @@ export default function DetailSheetView() {
       
       const initialMap = {};
       (res.data.items || []).forEach(it => {
-        initialMap[it.item_no + '_' + it.description] = {
-          gravel_lhs: 0, gravel_rhs: 0,
-          asphalt_lhs: 0, asphalt_rhs: 0,
-          concrete_lhs: 0, concrete_rhs: 0,
-          interlock_lhs: 0, interlock_rhs: 0
-        };
+        if (!it.is_header) {
+          initialMap[it.item_no + '_' + it.description] = {
+            gravel_lhs: 0, gravel_rhs: 0,
+            asphalt_lhs: 0, asphalt_rhs: 0,
+            concrete_lhs: 0, concrete_rhs: 0,
+            interlock_lhs: 0, interlock_rhs: 0
+          };
+        }
       });
       setItemMeasurements(initialMap);
     } catch (err) {
@@ -148,6 +149,13 @@ export default function DetailSheetView() {
   const surfaces = sheetData?.surfaces || [];
   const items = sheetData?.items || [];
 
+  // Calculate active column count for colSpan on yellow category header rows
+  const activeColCount = 3 + 
+    (visibleSections.gravel ? 2 : 0) + 
+    (visibleSections.asphalt ? 2 : 0) + 
+    (visibleSections.concrete ? 2 : 0) + 
+    (visibleSections.interlock ? 2 : 0) + 1;
+
   return (
     <div className="space-y-6">
       {/* Header & Detail Sheet Selector */}
@@ -159,7 +167,7 @@ export default function DetailSheetView() {
               <h2 className="text-xl font-bold text-white">RDA Detail Sheets (Road Data & Quantity Builder)</h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Comprehensive Road Measurement Data Sheet with Optional Surface Sections & Easy LHS/RHS Value Entry
+              Comprehensive Road Measurement Data Sheet with Yellow Category Banners & 4 Surface Options
             </p>
           </div>
 
@@ -317,7 +325,7 @@ export default function DetailSheetView() {
           <div>
             <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
               <SlidersHorizontal className="w-4 h-4" />
-              <span>Section 3: SSCM Measurement Matrix (Selectable Surface Sections)</span>
+              <span>Section 3: SSCM Measurement Matrix (Selectable Surface Sections & Yellow Category Banners)</span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Toggle surface sections ON/OFF below to customize entry columns and quickly enter LHS/RHS values
@@ -402,7 +410,7 @@ export default function DetailSheetView() {
         {/* DYNAMIC OPTIONAL SURFACE SECTIONS TABLE MATRIX */}
         <div className="overflow-x-auto rounded-xl border border-slate-800">
           <table className="w-full text-left text-[11px] text-slate-300">
-            {/* Header Row 1: Active Road Surface Sections */}
+            {/* Header Row 1: 4 Road Surface Sections */}
             <thead className="bg-slate-900 text-slate-200 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th colSpan={3} className="py-3 px-3 border-r border-slate-800 bg-slate-950 text-amber-400 font-extrabold text-xs">
@@ -485,9 +493,22 @@ export default function DetailSheetView() {
               </tr>
             </thead>
 
-            {/* Table Body */}
+            {/* Table Body - Renders Yellow Category Header Rows & Sub-item LHS/RHS Rows */}
             <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
               {items.map((it, idx) => {
+                // RENDER BRIGHT YELLOW CATEGORY HEADER BANNER ROW (EXACTLY AS SHOWN IN USER IMAGE)
+                if (it.is_header) {
+                  return (
+                    <tr key={idx} className="bg-yellow-400 text-slate-950 font-black border-y-2 border-yellow-500 shadow-sm">
+                      <td className="py-2 px-3 font-mono font-black text-xs border-r border-yellow-500">{it.item_no}</td>
+                      <td colSpan={activeColCount - 1} className="py-2 px-3 text-xs uppercase tracking-wider font-extrabold text-slate-950">
+                        {it.description}
+                      </td>
+                    </tr>
+                  );
+                }
+
+                // RENDER SUB-ITEM MEASUREMENT ROW WITH DYNAMIC LHS / RHS INPUTS
                 const itemKey = it.item_no + '_' + it.description;
                 const m = itemMeasurements[itemKey] || {
                   gravel_lhs: 0, gravel_rhs: 0,
@@ -505,9 +526,9 @@ export default function DetailSheetView() {
 
                 return (
                   <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-2 px-2 font-bold text-amber-400 border-r border-slate-800">{it.item_no}</td>
+                    <td className="py-2 px-2 font-bold text-amber-400 border-r border-slate-800">{it.item_no || '-'}</td>
                     <td className="py-2 px-3 font-medium text-slate-100 border-r border-slate-800">{it.description}</td>
-                    <td className="py-2 px-2 text-center text-slate-400 border-r border-slate-800">{it.unit}</td>
+                    <td className="py-2 px-2 text-center text-slate-400 border-r border-slate-800 font-semibold">{it.unit || '-'}</td>
 
                     {/* Gravel Inputs */}
                     {visibleSections.gravel && (

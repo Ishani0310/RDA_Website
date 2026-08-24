@@ -114,29 +114,35 @@ def get_detail_sheet_structure(sheet_name: str):
         {"type": "Concrete Surface Section", "length_m": 950, "avg_width_m": 4.5, "proposed_width_m": 4.5, "area_sqm": 4275}
     ]
 
-    # SSCM Quantity Items
+    # Parse Exact Category Headers and Sub-Item Measurements from Detail Sheet
     items = []
-    for idx, r in enumerate(rows):
+    for idx in range(23, len(rows)):
+        r = rows[idx]
         if not r:
             continue
         c0 = str(r[0]).strip() if r[0] is not None else ""
         c1 = str(r[1]).strip() if len(r) > 1 and r[1] is not None else ""
-        if c0 and (c0[0].isdigit() or c0.startswith("2.") or c0.startswith("3.") or c0.startswith("4.") or c0.startswith("5.")):
-            unit = ""
-            for cell_val in r[2:]:
-                if str(cell_val).strip() in ["Sq.m", "Cu.m", "L.m", "Nos", "Mtr", "LS", "Km"]:
-                    unit = str(cell_val).strip()
-                    break
+        
+        if not c0 and not c1:
+            continue
             
-            if c1 and c1 != "DESCRIPTION":
-                items.append({
-                    "item_no": c0,
-                    "description": c1,
-                    "unit": unit or "Sq.m",
-                    "lhs_qty": 0.0,
-                    "rhs_qty": 0.0,
-                    "total_qty": 0.0
-                })
+        unit = ""
+        for cell_val in r[2:16]:
+            if str(cell_val).strip() in ["Sq.m", "Cu.m", "L.m", "Nos", "Mtr", "LS", "Km"]:
+                unit = str(cell_val).strip()
+                break
+                
+        is_header = False
+        if (c0 and not unit and c1) or (c1 and not unit and not c0.isdigit() and "." in c0 and len(c0) <= 6):
+            is_header = True
+            
+        items.append({
+            "item_no": c0,
+            "description": c1,
+            "unit": unit,
+            "is_header": is_header,
+            "row_idx": idx + 1
+        })
 
     return {
         "sheet_name": sheet_name,
@@ -144,7 +150,7 @@ def get_detail_sheet_structure(sheet_name: str):
         "transport_distances": transport_distances,
         "surfaces": surfaces,
         "total_sscm_items": len(items),
-        "items": items[:40]  # Return first 40 for preview
+        "items": items[:60]  # Return first 60 rows for clean performance
     }
 
 class DetailSheetCreateRequest(BaseModel):
