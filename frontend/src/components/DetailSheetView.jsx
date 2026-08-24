@@ -5,18 +5,15 @@ import {
   Plus, 
   Save, 
   RefreshCw, 
-  MapPin, 
   Truck, 
   Layers, 
   Calculator, 
-  CheckCircle2,
-  Loader2,
   Building2,
-  FileText
+  FileText,
+  Loader2
 } from 'lucide-react';
 
 export default function DetailSheetView() {
-  // Show only ONE Detail Section by default as requested by user
   const [detailSheets, setDetailSheets] = useState(['Detail -1']);
   const [selectedSheet, setSelectedSheet] = useState('Detail -1');
   const [sheetData, setSheetData] = useState(null);
@@ -29,6 +26,9 @@ export default function DetailSheetView() {
   const [newProvince, setNewProvince] = useState('Central');
   const [newDistrict, setNewDistrict] = useState('Kandy');
   const [newRoadName, setNewRoadName] = useState('New Road Rehabilitation Section');
+
+  // Interactive LHS/RHS Measurement Input State
+  const [itemMeasurements, setItemMeasurements] = useState({});
 
   useEffect(() => {
     fetchDetailSheet(selectedSheet);
@@ -45,11 +45,34 @@ export default function DetailSheetView() {
     try {
       const res = await axios.get(`/api/detail-sheet/${sheetName}`);
       setSheetData(res.data);
+      
+      // Initialize interactive measurement grid for all items
+      const initialMap = {};
+      (res.data.items || []).forEach(it => {
+        initialMap[it.item_no + '_' + it.description] = {
+          gravel_lhs: 0, gravel_rhs: 0,
+          asphalt_lhs: 0, asphalt_rhs: 0,
+          concrete_lhs: 0, concrete_rhs: 0,
+          interlock_lhs: 0, interlock_rhs: 0
+        };
+      });
+      setItemMeasurements(initialMap);
     } catch (err) {
       console.error(`Error fetching detail sheet ${sheetName}:`, err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleInputChange = (itemKey, field, value) => {
+    const numVal = parseFloat(value) || 0;
+    setItemMeasurements(prev => ({
+      ...prev,
+      [itemKey]: {
+        ...(prev[itemKey] || {}),
+        [field]: numVal
+      }
+    }));
   };
 
   const handleCreateNewSheet = async (e) => {
@@ -92,7 +115,7 @@ export default function DetailSheetView() {
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Detail Sheet Selector */}
+      {/* Header & Detail Sheet Selector */}
       <div className="glass-card rounded-2xl p-5 border border-slate-800">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -101,7 +124,7 @@ export default function DetailSheetView() {
               <h2 className="text-xl font-bold text-white">RDA Detail Sheets (Road Data & Quantity Builder)</h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Comprehensive Road Measurement Data Sheet, Material Distances & SSCM Pay Item Quantities
+              Comprehensive Road Measurement Data Sheet with 4 Surface Options (Gravel, Asphalt, Concrete, Interlock) & LHS/RHS Entry
             </p>
           </div>
 
@@ -124,7 +147,7 @@ export default function DetailSheetView() {
           </div>
         </div>
 
-        {/* Detail Sheet Tabs - Shows ONLY active created detail sheets */}
+        {/* Detail Sheet Tabs */}
         <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
           {detailSheets.map((sName) => (
             <button
@@ -142,7 +165,7 @@ export default function DetailSheetView() {
         </div>
       </div>
 
-      {/* SECTION 1: FULL ROAD DATA SHEET METADATA HEADER */}
+      {/* SECTION 1: GENERAL ROAD PROJECT DATA SHEET METADATA HEADER */}
       <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
@@ -226,7 +249,7 @@ export default function DetailSheetView() {
         </div>
       </div>
 
-      {/* SECTION 2: MATERIAL TRANSPORT DISTANCES (SAMPLE TRANSPORT DISTANCES) */}
+      {/* SECTION 2: MATERIAL TRANSPORT DISTANCES */}
       <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
         <div className="flex items-center gap-2 text-blue-400 font-bold text-sm border-b border-slate-800 pb-3">
           <Truck className="w-4 h-4" />
@@ -253,72 +276,190 @@ export default function DetailSheetView() {
         </div>
       </div>
 
-      {/* SECTION 3: EXISTING ROAD SURFACE CLASSIFICATION */}
+      {/* SECTION 3: 4 ROAD SURFACE OPTIONS WITH DYNAMIC LHS & RHS INPUT MEASUREMENT MATRIX */}
       <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
-        <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm border-b border-slate-800 pb-3">
-          <Layers className="w-4 h-4" />
-          <span>Section 3: Existing Road Surface Classification & Surface Areas</span>
-        </div>
-
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-900 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
-              <tr>
-                <th className="py-3 px-4">Surface Classification</th>
-                <th className="py-3 px-4 text-right">Length (m)</th>
-                <th className="py-3 px-4 text-right">Avg Existing Width (m)</th>
-                <th className="py-3 px-4 text-right">Proposed Width (m)</th>
-                <th className="py-3 px-4 text-right">Calculated Area (Sq.m)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 bg-slate-950/40 font-mono">
-              {surfaces.map((surf, i) => (
-                <tr key={i} className="hover:bg-slate-800/40">
-                  <td className="py-3 px-4 font-sans font-medium text-slate-100">{surf.type}</td>
-                  <td className="py-3 px-4 text-right text-slate-300">{surf.length_m} m</td>
-                  <td className="py-3 px-4 text-right text-slate-300">{surf.avg_width_m} m</td>
-                  <td className="py-3 px-4 text-right text-slate-300">{surf.proposed_width_m} m</td>
-                  <td className="py-3 px-4 text-right font-bold text-emerald-400">{surf.area_sqm.toLocaleString()} Sq.m</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* SECTION 4: ITEMIZED SSCM MEASUREMENT & QUANTITY CALCULATION SHEET */}
-      <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2 text-purple-400 font-bold text-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
             <FileText className="w-4 h-4" />
-            <span>Section 4: Itemized SSCM Measurement & Quantity Calculation Sheet</span>
+            <span>Section 3: Detailed SSCM Measurement & Quantity Sheet (4 Surface Options + LHS & RHS Inputs)</span>
           </div>
-          <span className="text-xs text-slate-400">Total Extracted SSCM Items: <span className="text-amber-400 font-bold">{items.length}</span></span>
+          <span className="text-xs text-slate-400">Total SSCM Line Items: <span className="text-amber-400 font-bold">{items.length}</span></span>
         </div>
 
+        {/* 4 SURFACE SECTIONS TABLE MATRIX WITH LHS / RHS COLUMNS */}
         <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-900 text-slate-400 font-semibold uppercase text-[10px] tracking-wider border-b border-slate-800">
+          <table className="w-full text-left text-[11px] text-slate-300">
+            {/* Header Row 1: 4 Road Surface Sections */}
+            <thead className="bg-slate-900 text-slate-200 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
-                <th className="py-3 px-3 w-16">Item No</th>
-                <th className="py-3 px-6">SSCM Description of Work</th>
-                <th className="py-3 px-3 text-center">Unit</th>
-                <th className="py-3 px-4 text-right">LHS Qty</th>
-                <th className="py-3 px-4 text-right">RHS Qty</th>
-                <th className="py-3 px-4 text-right">Total Calculated Qty</th>
+                <th colSpan={3} className="py-3 px-3 border-r border-slate-800 bg-slate-950 text-amber-400 font-extrabold text-xs">
+                  SSCM Item & Description
+                </th>
+                
+                {/* Surface Section 1: Gravel Section */}
+                <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-amber-500/10 text-amber-400 border-t-2 border-t-amber-500">
+                  1. Gravel Section
+                </th>
+
+                {/* Surface Section 2: AC, Macadam, DBST, Tar Surface */}
+                <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-blue-500/10 text-blue-400 border-t-2 border-t-blue-500">
+                  2. AC, Macadam, DBST, Tar Surface
+                </th>
+
+                {/* Surface Section 3: Concrete Surface */}
+                <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-purple-500/10 text-purple-400 border-t-2 border-t-purple-500">
+                  3. Concrete Surface Section
+                </th>
+
+                {/* Surface Section 4: Interlock Paved Section */}
+                <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-emerald-500/10 text-emerald-400 border-t-2 border-t-emerald-500">
+                  4. Interlock Paved Section
+                </th>
+
+                {/* Overall Total Quantity */}
+                <th className="py-2.5 px-3 text-right bg-slate-950 text-amber-400 border-t-2 border-t-amber-400 font-extrabold text-xs">
+                  Total (Qty / m)
+                </th>
+              </tr>
+
+              {/* Header Row 2: LHS and RHS Columns under each of the 4 Sections */}
+              <tr className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-[9px]">
+                <th className="py-2 px-2 w-12 border-r border-slate-800">Item</th>
+                <th className="py-2 px-3 border-r border-slate-800">Description of Work</th>
+                <th className="py-2 px-2 text-center border-r border-slate-800">Unit</th>
+
+                {/* Gravel LHS / RHS */}
+                <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-amber-500/5">LHS</th>
+                <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-amber-500/5">RHS</th>
+
+                {/* Tar/Asphalt LHS / RHS */}
+                <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-blue-500/5">LHS</th>
+                <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-blue-500/5">RHS</th>
+
+                {/* Concrete LHS / RHS */}
+                <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-purple-500/5">LHS</th>
+                <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-purple-500/5">RHS</th>
+
+                {/* Interlock LHS / RHS */}
+                <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-emerald-500/5">LHS</th>
+                <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-emerald-500/5">RHS</th>
+
+                {/* Total */}
+                <th className="py-1.5 px-3 text-right bg-slate-950">Grand Total</th>
               </tr>
             </thead>
+
+            {/* Table Body with LHS & RHS Input Fields */}
             <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
-              {items.map((it, i) => (
-                <tr key={i} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="py-3 px-3 font-bold text-amber-400">{it.item_no}</td>
-                  <td className="py-3 px-6 font-medium text-slate-100">{it.description}</td>
-                  <td className="py-3 px-3 text-center text-slate-400">{it.unit}</td>
-                  <td className="py-3 px-4 text-right font-mono text-slate-300">0.0</td>
-                  <td className="py-3 px-4 text-right font-mono text-slate-300">0.0</td>
-                  <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">0.0</td>
-                </tr>
-              ))}
+              {items.map((it, idx) => {
+                const itemKey = it.item_no + '_' + it.description;
+                const m = itemMeasurements[itemKey] || {
+                  gravel_lhs: 0, gravel_rhs: 0,
+                  asphalt_lhs: 0, asphalt_rhs: 0,
+                  concrete_lhs: 0, concrete_rhs: 0,
+                  interlock_lhs: 0, interlock_rhs: 0
+                };
+
+                const gravelTotal = (m.gravel_lhs || 0) + (m.gravel_rhs || 0);
+                const asphaltTotal = (m.asphalt_lhs || 0) + (m.asphalt_rhs || 0);
+                const concreteTotal = (m.concrete_lhs || 0) + (m.concrete_rhs || 0);
+                const interlockTotal = (m.interlock_lhs || 0) + (m.interlock_rhs || 0);
+
+                const grandTotal = gravelTotal + asphaltTotal + concreteTotal + interlockTotal;
+
+                return (
+                  <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="py-2 px-2 font-bold text-amber-400 border-r border-slate-800">{it.item_no}</td>
+                    <td className="py-2 px-3 font-medium text-slate-100 border-r border-slate-800">{it.description}</td>
+                    <td className="py-2 px-2 text-center text-slate-400 border-r border-slate-800">{it.unit}</td>
+
+                    {/* Gravel Section LHS / RHS */}
+                    <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-amber-500/5">
+                      <input 
+                        type="number" 
+                        value={m.gravel_lhs || ''} 
+                        onChange={(e) => handleInputChange(itemKey, 'gravel_lhs', e.target.value)}
+                        placeholder="0"
+                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-amber-500"
+                      />
+                    </td>
+                    <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-amber-500/5">
+                      <input 
+                        type="number" 
+                        value={m.gravel_rhs || ''} 
+                        onChange={(e) => handleInputChange(itemKey, 'gravel_rhs', e.target.value)}
+                        placeholder="0"
+                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-amber-500"
+                      />
+                    </td>
+
+                    {/* AC / Tar Section LHS / RHS */}
+                    <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-blue-500/5">
+                      <input 
+                        type="number" 
+                        value={m.asphalt_lhs || ''} 
+                        onChange={(e) => handleInputChange(itemKey, 'asphalt_lhs', e.target.value)}
+                        placeholder="0"
+                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-blue-500"
+                      />
+                    </td>
+                    <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-blue-500/5">
+                      <input 
+                        type="number" 
+                        value={m.asphalt_rhs || ''} 
+                        onChange={(e) => handleInputChange(itemKey, 'asphalt_rhs', e.target.value)}
+                        placeholder="0"
+                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-blue-500"
+                      />
+                    </td>
+
+                    {/* Concrete Section LHS / RHS */}
+                    <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-purple-500/5">
+                      <input 
+                        type="number" 
+                        value={m.concrete_lhs || ''} 
+                        onChange={(e) => handleInputChange(itemKey, 'concrete_lhs', e.target.value)}
+                        placeholder="0"
+                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-purple-500"
+                      />
+                    </td>
+                    <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-purple-500/5">
+                      <input 
+                        type="number" 
+                        value={m.concrete_rhs || ''} 
+                        onChange={(e) => handleInputChange(itemKey, 'concrete_rhs', e.target.value)}
+                        placeholder="0"
+                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-purple-500"
+                      />
+                    </td>
+
+                    {/* Interlock Section LHS / RHS */}
+                    <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-emerald-500/5">
+                      <input 
+                        type="number" 
+                        value={m.interlock_lhs || ''} 
+                        onChange={(e) => handleInputChange(itemKey, 'interlock_lhs', e.target.value)}
+                        placeholder="0"
+                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-emerald-500"
+                      />
+                    </td>
+                    <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-emerald-500/5">
+                      <input 
+                        type="number" 
+                        value={m.interlock_rhs || ''} 
+                        onChange={(e) => handleInputChange(itemKey, 'interlock_rhs', e.target.value)}
+                        placeholder="0"
+                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-emerald-500"
+                      />
+                    </td>
+
+                    {/* Calculated Grand Total */}
+                    <td className="py-2 px-3 text-right font-mono font-bold text-amber-400 bg-slate-950">
+                      {grandTotal > 0 ? grandTotal.toLocaleString() : '0'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
