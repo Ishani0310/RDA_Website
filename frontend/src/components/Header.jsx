@@ -8,10 +8,10 @@ import {
   ShieldAlert, 
   Cpu, 
   CheckCircle2, 
-  Search, 
   UserCircle,
   FileText,
-  Upload
+  Upload,
+  FileEdit
 } from 'lucide-react';
 
 export default function Header({ activeTab, setActiveTab }) {
@@ -19,6 +19,7 @@ export default function Header({ activeTab, setActiveTab }) {
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Layers },
+    { id: 'details', label: 'Detail Sheets Builder', icon: FileEdit },
     { id: 'estimates', label: 'Road Estimates', icon: FileSpreadsheet },
     { id: 'sections', label: 'Section Builder', icon: Calculator },
     { id: 'landslide', label: 'Landslide Mitigation', icon: ShieldAlert },
