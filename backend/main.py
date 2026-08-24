@@ -2,6 +2,7 @@ import os
 import io
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +24,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Workspace Root and Absolute Path Resolution
 WORKSPACE_ROOT = r"c:\Users\DeLL\Downloads\work\Website Creation"
 EXCEL_FILE_NAME = "Latest Sample Estimate Format Rev0- 11.08.2026_Sec5 (2)_Sec6_Sec7_Recalculated_Sec8_to_11.xlsm"
 EXCEL_FILE_PATH = os.path.join(WORKSPACE_ROOT, EXCEL_FILE_NAME)
@@ -50,7 +50,7 @@ def get_workbook_info():
     sheets = wb.sheetnames
     
     road_sheets = [s for s in sheets if s.startswith('Road Estimate') or s.startswith('Road Est ')]
-    landslide_sheets = [s for s in sheets if 'Landslide' in s or 'Land Est' in s]
+    landslide_sheets = [s for s in sheets if 'Landslide' in s or 'Land Est ' in s]
     detail_sheets = [s for s in sheets if s.startswith('Detail ')]
     qty_sheets = [s for s in sheets if s.startswith('qty-') or s.startswith('SSR for MCR-')]
     summary_sheets = [s for s in sheets if 'Summary' in s or 'SUMMARY' in s or s in ['Con Sum', 'Bill PS', 'Daywork']]
@@ -197,106 +197,217 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     ws = wb.active
     ws.title = req.sheet_name or "Detail -1"
     
-    title_font = Font(name="Calibri", size=14, bold=True, color="1E3A8A")
-    sec_font = Font(name="Calibri", size=11, bold=True, color="1E293B")
-    header_bg = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+    # Exact Color Palette matching user image
+    peach_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+    blue_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+    purple_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    interlock_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    green_fill = PatternFill(start_color="A9D08E", end_color="A9D08E", fill_type="solid")
+    light_green_input = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+    
+    title_font = Font(name="Calibri", size=14, bold=True, color="1E3A8A")
+    sec_font = Font(name="Calibri", size=11, bold=True, color="000000")
+    bold_font = Font(name="Calibri", size=10, bold=True, color="000000")
+    normal_font = Font(name="Calibri", size=10, color="000000")
     yellow_font = Font(name="Calibri", size=11, bold=True, color="000000")
+    
     thin_border = Border(
-        left=Side(style='thin', color='D1D5DB'),
-        right=Side(style='thin', color='D1D5DB'),
-        top=Side(style='thin', color='D1D5DB'),
-        bottom=Side(style='thin', color='D1D5DB')
+        left=Side(style='thin', color='000000'),
+        right=Side(style='thin', color='000000'),
+        top=Side(style='thin', color='000000'),
+        bottom=Side(style='thin', color='000000')
     )
     
-    # Title Banner
-    ws.merge_cells('A1:L1')
+    # Set Column Widths
+    col_widths = {
+        'A': 8, 'B': 45, 'C': 12, 'D': 12, 'E': 8,
+        'F': 12, 'G': 12, 'H': 8, 'I': 12, 'J': 12, 'K': 8,
+        'L': 12, 'M': 12, 'N': 8, 'O': 14
+    }
+    for col_letter, width in col_widths.items():
+        ws.column_dimensions[col_letter].width = width
+
+    # Title Block
+    ws.merge_cells('A1:O1')
     ws['A1'] = "ROAD DEVELOPMENT AUTHORITY - SRI LANKA"
     ws['A1'].font = title_font
     ws['A1'].alignment = Alignment(horizontal="center")
     
-    ws.merge_cells('A2:L2')
-    ws['A2'] = f"DETAIL DATA SHEET & MEASUREMENT COMPUTATION ({req.sheet_name})"
+    ws.merge_cells('A2:O2')
+    ws['A2'] = f"ROAD DATA & MEASUREMENT SHEET ({req.sheet_name})"
     ws['A2'].font = sec_font
     ws['A2'].alignment = Alignment(horizontal="center")
 
     # Section 1 Metadata
-    ws['A4'] = "SECTION 1: GENERAL PROJECT DATA SHEET"
-    ws['A4'].font = sec_font
-    
-    meta = req.metadata or {}
-    ws['A5'] = "Project Title:"
-    ws['B5'] = meta.get("project_title", "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT")
-    ws['A6'] = "Contract No:"
-    ws['B6'] = meta.get("contract_no", "RDA/DC/DRP/SLOPE/CP/KDY/KDY/PACKAGE 17A")
-    ws['A7'] = "Province:"
-    ws['B7'] = meta.get("province", "Central")
-    ws['D7'] = "District:"
-    ws['E7'] = meta.get("district", "Kandy")
-    ws['A8'] = "EE Division:"
-    ws['B8'] = meta.get("ee_division", "Kandy EE")
-    ws['D8'] = "CE Division:"
-    ws['E8'] = meta.get("ce_division", "Kandy CE")
-    ws['A9'] = "Road Length (km):"
-    ws['B9'] = meta.get("road_length_km", "4.2")
-    ws['D9'] = "Proposed Width (m):"
-    ws['E9'] = meta.get("proposed_width_m", "4.5")
+    ws['A4'] = "Project Title:"
+    ws['B4'] = req.metadata.get("project_title", "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT")
+    ws['A5'] = "Contract No:"
+    ws['B5'] = req.metadata.get("contract_no", "RDA/DC/DRP/SLOPE/CP/KDY/KDY/PACKAGE 17A")
+    ws['A6'] = "Province:"
+    ws['B6'] = req.metadata.get("province", "Central")
+    ws['D6'] = "District:"
+    ws['E6'] = req.metadata.get("district", "Kandy")
 
-    # Section 3 Table Headers
-    ws.cell(row=12, column=1, value="SSCM Item & Description")
-    ws.merge_cells("A12:C12")
-    ws.cell(row=12, column=4, value="1. Gravel Section").fill = PatternFill(start_color="FDE68A", end_color="FDE68A", fill_type="solid")
-    ws.merge_cells("D12:E12")
-    ws.cell(row=12, column=6, value="2. AC / Macadam / Tar Surface").fill = PatternFill(start_color="BFDBFE", end_color="BFDBFE", fill_type="solid")
-    ws.merge_cells("F12:G12")
-    ws.cell(row=12, column=8, value="3. Concrete Surface Section").fill = PatternFill(start_color="E9D5FF", end_color="E9D5FF", fill_type="solid")
-    ws.merge_cells("H12:I12")
-    ws.cell(row=12, column=10, value="4. Interlock Paved Section").fill = PatternFill(start_color="A7F3D0", end_color="A7F3D0", fill_type="solid")
-    ws.merge_cells("J12:K12")
-    ws.cell(row=12, column=12, value="Grand Total (Qty)")
+    # Row 18: Road Surface Classification Headers (Matching User Image)
+    ws['B18'] = "Existing Road Section"
+    ws['B18'].font = bold_font
     
-    headers_row2 = ["Item", "Description of Work", "Unit", "LHS", "RHS", "LHS", "RHS", "LHS", "RHS", "LHS", "RHS", "Total Qty"]
-    for col_idx, text in enumerate(headers_row2, 1):
-        cell = ws.cell(row=13, column=col_idx, value=text)
-        cell.fill = header_bg
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center")
+    ws.merge_cells('C18:E18')
+    ws['C18'] = "Gravel Section"
+    ws['C18'].fill = peach_fill
+    ws['C18'].font = bold_font
+    ws['C18'].alignment = Alignment(horizontal="center")
+    
+    ws.merge_cells('F18:H18')
+    ws['F18'] = "Macadam, DBST, SBST, Tar Surface Section"
+    ws['F18'].fill = blue_fill
+    ws['F18'].font = bold_font
+    ws['F18'].alignment = Alignment(horizontal="center")
+    
+    ws.merge_cells('I18:K18')
+    ws['I18'] = "Concrete Surface Section"
+    ws['I18'].fill = purple_fill
+    ws['I18'].font = bold_font
+    ws['I18'].alignment = Alignment(horizontal="center")
+    
+    ws.merge_cells('L18:N18')
+    ws['L18'] = "Interlock Paved Section"
+    ws['L18'].fill = interlock_fill
+    ws['L18'].font = bold_font
+    ws['L18'].alignment = Alignment(horizontal="center")
 
-    curr_row = 14
+    ws['O18'] = "Total (m)"
+    ws['O18'].font = bold_font
+    ws['O18'].alignment = Alignment(horizontal="center")
+
+    # Row 20: Length
+    ws['B20'] = "Length"
+    ws['E20'] = "m"
+    ws['H20'] = "m"
+    ws['K20'] = "m"
+    ws['N20'] = "m"
+    ws['O20'] = 0
+
+    # Row 21: Proposed Width (Green Fill)
+    ws['B21'] = "Proposed Width"
+    for col_letter in ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']:
+        ws[f'{col_letter}21'].fill = green_fill
+    ws['E21'] = "m"
+    ws['H21'] = "m"
+    ws['K21'] = "m"
+    ws['N21'] = "m"
+
+    # Row 22: Avg. Existing Width (Green Fill)
+    ws['B22'] = "Avg. Existing Width"
+    for col_letter in ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']:
+        ws[f'{col_letter}22'].fill = green_fill
+    ws['E22'] = "m"
+    ws['H22'] = "m"
+    ws['K22'] = "m"
+    ws['N22'] = "m"
+
+    # Row 28: LHS / RHS Sub-headers (Matching User Image)
+    sub_headers = {
+        'C28': 'LHS', 'D28': 'RHS',
+        'F28': 'LHS', 'G28': 'RHS',
+        'I28': 'LHS', 'J28': 'RHS',
+        'L28': 'LHS', 'M28': 'RHS'
+    }
+    for cell_ref, text in sub_headers.items():
+        ws[cell_ref] = text
+        ws[cell_ref].font = bold_font
+        ws[cell_ref].alignment = Alignment(horizontal="center")
+
+    # Populate Data Items Starting Row 24
+    curr_row = 24
     for it in req.items:
+        # Category Banner Row (Yellow Bar across A to N)
         if it.is_header:
-            cell_item = ws.cell(row=curr_row, column=1, value=it.item_no)
-            cell_item.fill = yellow_fill
-            cell_item.font = yellow_font
+            # If current row is row 28 (reserved for LHS/RHS), jump to row 29
+            if curr_row == 28:
+                curr_row = 29
+                
+            ws.merge_cells(start_row=curr_row, start_column=1, end_row=curr_row, end_column=15)
+            banner_cell = ws.cell(row=curr_row, column=1, value=f"{it.item_no}  {it.description}")
+            banner_cell.fill = yellow_fill
+            banner_cell.font = yellow_font
+            banner_cell.alignment = Alignment(horizontal="left", vertical="center")
+            curr_row += 1
             
-            cell_desc = ws.cell(row=curr_row, column=2, value=it.description)
-            cell_desc.fill = yellow_fill
-            cell_desc.font = yellow_font
-            
-            ws.merge_cells(start_row=curr_row, start_column=2, end_row=curr_row, end_column=12)
+            # Re-apply LHS / RHS sub-header row right after tree removal or category header if applicable
+            if it.item_no == "2.2":
+                ws.cell(row=curr_row, column=3, value="LHS").alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=4, value="RHS").alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=6, value="LHS").alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=7, value="RHS").alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=9, value="LHS").alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=10, value="RHS").alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=12, value="LHS").alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=13, value="RHS").alignment = Alignment(horizontal="center")
+                curr_row += 1
         else:
             ws.cell(row=curr_row, column=1, value=it.item_no).border = thin_border
             ws.cell(row=curr_row, column=2, value=it.description).border = thin_border
-            ws.cell(row=curr_row, column=3, value=it.unit).border = thin_border
             
-            ws.cell(row=curr_row, column=4, value=it.gravel_lhs or 0).border = thin_border
-            ws.cell(row=curr_row, column=5, value=it.gravel_rhs or 0).border = thin_border
+            # Gravel Section Inputs (Cols C, D, E)
+            c_cell = ws.cell(row=curr_row, column=3, value=it.gravel_lhs or 0)
+            c_cell.fill = light_green_input
+            c_cell.border = thin_border
             
-            ws.cell(row=curr_row, column=6, value=it.asphalt_lhs or 0).border = thin_border
-            ws.cell(row=curr_row, column=7, value=it.asphalt_rhs or 0).border = thin_border
+            d_cell = ws.cell(row=curr_row, column=4, value=it.gravel_rhs or 0)
+            d_cell.fill = light_green_input
+            d_cell.border = thin_border
             
-            ws.cell(row=curr_row, column=8, value=it.concrete_lhs or 0).border = thin_border
-            ws.cell(row=curr_row, column=9, value=it.concrete_rhs or 0).border = thin_border
+            e_unit = ws.cell(row=curr_row, column=5, value=it.unit)
+            e_unit.fill = peach_fill
+            e_unit.border = thin_border
             
-            ws.cell(row=curr_row, column=10, value=it.interlock_lhs or 0).border = thin_border
-            ws.cell(row=curr_row, column=11, value=it.interlock_rhs or 0).border = thin_border
+            # Tar / Asphalt Section Inputs (Cols F, G, H)
+            f_cell = ws.cell(row=curr_row, column=6, value=it.asphalt_lhs or 0)
+            f_cell.fill = light_green_input
+            f_cell.border = thin_border
             
-            tot_cell = ws.cell(row=curr_row, column=12, value=f"=SUM(D{curr_row}:K{curr_row})")
-            tot_cell.font = Font(bold=True, color="D97706")
-            tot_cell.border = thin_border
+            g_cell = ws.cell(row=curr_row, column=7, value=it.asphalt_rhs or 0)
+            g_cell.fill = light_green_input
+            g_cell.border = thin_border
+            
+            h_unit = ws.cell(row=curr_row, column=8, value=it.unit)
+            h_unit.fill = blue_fill
+            h_unit.border = thin_border
+            
+            # Concrete Section Inputs (Cols I, J, K)
+            i_cell = ws.cell(row=curr_row, column=9, value=it.concrete_lhs or 0)
+            i_cell.fill = light_green_input
+            i_cell.border = thin_border
+            
+            j_cell = ws.cell(row=curr_row, column=10, value=it.concrete_rhs or 0)
+            j_cell.fill = light_green_input
+            j_cell.border = thin_border
+            
+            k_unit = ws.cell(row=curr_row, column=11, value=it.unit)
+            k_unit.fill = purple_fill
+            k_unit.border = thin_border
+            
+            # Interlock Section Inputs (Cols L, M, N)
+            l_cell = ws.cell(row=curr_row, column=12, value=it.interlock_lhs or 0)
+            l_cell.fill = light_green_input
+            l_cell.border = thin_border
+            
+            m_cell = ws.cell(row=curr_row, column=13, value=it.interlock_rhs or 0)
+            m_cell.fill = light_green_input
+            m_cell.border = thin_border
+            
+            n_unit = ws.cell(row=curr_row, column=14, value=it.unit)
+            n_unit.fill = interlock_fill
+            n_unit.border = thin_border
+            
+            # Grand Total Formula Column (Col O)
+            o_tot = ws.cell(row=curr_row, column=15, value=f"=C{curr_row}+D{curr_row}+F{curr_row}+G{curr_row}+I{curr_row}+J{curr_row}+L{curr_row}+M{curr_row}")
+            o_tot.font = Font(bold=True)
+            o_tot.border = thin_border
 
-        curr_row += 1
+            curr_row += 1
 
     output = io.BytesIO()
     wb.save(output)
