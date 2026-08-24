@@ -1,3 +1,9 @@
+# Restricted / Sensitive Excel Files
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+
 # Node / Frontend
 frontend/node_modules/
 frontend/dist/
