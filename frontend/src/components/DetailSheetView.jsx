@@ -16,10 +16,8 @@ import {
 } from 'lucide-react';
 
 export default function DetailSheetView() {
-  const [detailSheets, setDetailSheets] = useState([
-    'Detail -1', 'Detail -2', 'Detail -3', 'Detail -4', 'Detail -5',
-    'Detail -6', 'Detail -7', 'Detail -8', 'Detail -9', 'Detail -10', 'Detail -11'
-  ]);
+  // Show only ONE Detail Section by default as requested by user
+  const [detailSheets, setDetailSheets] = useState(['Detail -1']);
   const [selectedSheet, setSelectedSheet] = useState('Detail -1');
   const [sheetData, setSheetData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -27,14 +25,20 @@ export default function DetailSheetView() {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // New Detail Sheet Form State
-  const [newSheetName, setNewSheetName] = useState('Detail -12');
+  const [newSheetName, setNewSheetName] = useState('Detail -2');
   const [newProvince, setNewProvince] = useState('Central');
   const [newDistrict, setNewDistrict] = useState('Kandy');
-  const [newRoadName, setNewRoadName] = useState('Kandy-Badulla Road Section');
+  const [newRoadName, setNewRoadName] = useState('New Road Rehabilitation Section');
 
   useEffect(() => {
     fetchDetailSheet(selectedSheet);
   }, [selectedSheet]);
+
+  const openCreateModal = () => {
+    const nextNum = detailSheets.length + 1;
+    setNewSheetName(`Detail -${nextNum}`);
+    setShowCreateModal(true);
+  };
 
   const fetchDetailSheet = async (sheetName) => {
     setLoading(true);
@@ -65,7 +69,6 @@ export default function DetailSheetView() {
       }
       setSelectedSheet(newSheetName);
       setShowCreateModal(false);
-      alert(`Detail Sheet '${newSheetName}' created with full RDA structure!`);
     } catch (err) {
       console.error('Error creating detail sheet:', err);
     } finally {
@@ -77,7 +80,7 @@ export default function DetailSheetView() {
     return (
       <div className="h-64 flex flex-col items-center justify-center space-y-3 text-slate-400">
         <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
-        <span className="text-xs font-semibold">Loading Full Detail Sheet Structure from Excel Engine...</span>
+        <span className="text-xs font-semibold">Loading Detail Sheet Structure from Excel Engine...</span>
       </div>
     );
   }
@@ -104,7 +107,7 @@ export default function DetailSheetView() {
 
           <div className="flex items-center gap-3">
             <button 
-              onClick={() => setShowCreateModal(true)}
+              onClick={openCreateModal}
               className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -121,7 +124,7 @@ export default function DetailSheetView() {
           </div>
         </div>
 
-        {/* Detail Sheet Tabs */}
+        {/* Detail Sheet Tabs - Shows ONLY active created detail sheets */}
         <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
           {detailSheets.map((sName) => (
             <button
@@ -198,7 +201,6 @@ export default function DetailSheetView() {
               <option value="Kalutara">Kalutara</option>
               <option value="Galle">Galle</option>
               <option value="Matara">Matara</option>
-
             </select>
           </div>
 
@@ -348,7 +350,6 @@ export default function DetailSheetView() {
                   value={newSheetName} 
                   onChange={(e) => setNewSheetName(e.target.value)} 
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono"
-                  placeholder="Detail -12"
                 />
               </div>
 
