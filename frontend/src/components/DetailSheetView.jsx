@@ -10,7 +10,10 @@ import {
   Calculator, 
   Building2,
   FileText,
-  Loader2
+  Loader2,
+  Check,
+  Eye,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export default function DetailSheetView() {
@@ -30,6 +33,14 @@ export default function DetailSheetView() {
   // Interactive LHS/RHS Measurement Input State
   const [itemMeasurements, setItemMeasurements] = useState({});
 
+  // Optional Surface Section Toggles (User can choose which surface sections to show for easy value entry)
+  const [visibleSections, setVisibleSections] = useState({
+    gravel: true,
+    asphalt: true,
+    concrete: true,
+    interlock: true
+  });
+
   useEffect(() => {
     fetchDetailSheet(selectedSheet);
   }, [selectedSheet]);
@@ -46,7 +57,6 @@ export default function DetailSheetView() {
       const res = await axios.get(`/api/detail-sheet/${sheetName}`);
       setSheetData(res.data);
       
-      // Initialize interactive measurement grid for all items
       const initialMap = {};
       (res.data.items || []).forEach(it => {
         initialMap[it.item_no + '_' + it.description] = {
@@ -73,6 +83,31 @@ export default function DetailSheetView() {
         [field]: numVal
       }
     }));
+  };
+
+  const toggleSection = (sectionKey) => {
+    setVisibleSections(prev => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey]
+    }));
+  };
+
+  const selectSingleSection = (sectionKey) => {
+    setVisibleSections({
+      gravel: sectionKey === 'gravel',
+      asphalt: sectionKey === 'asphalt',
+      concrete: sectionKey === 'concrete',
+      interlock: sectionKey === 'interlock'
+    });
+  };
+
+  const showAllSections = () => {
+    setVisibleSections({
+      gravel: true,
+      asphalt: true,
+      concrete: true,
+      interlock: true
+    });
   };
 
   const handleCreateNewSheet = async (e) => {
@@ -124,7 +159,7 @@ export default function DetailSheetView() {
               <h2 className="text-xl font-bold text-white">RDA Detail Sheets (Road Data & Quantity Builder)</h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Comprehensive Road Measurement Data Sheet with 4 Surface Options (Gravel, Asphalt, Concrete, Interlock) & LHS/RHS Entry
+              Comprehensive Road Measurement Data Sheet with Optional Surface Sections & Easy LHS/RHS Value Entry
             </p>
           </div>
 
@@ -276,45 +311,131 @@ export default function DetailSheetView() {
         </div>
       </div>
 
-      {/* SECTION 3: 4 ROAD SURFACE OPTIONS WITH DYNAMIC LHS & RHS INPUT MEASUREMENT MATRIX */}
+      {/* SECTION 3: OPTIONAL SURFACE SECTIONS TOGGLE & ENTRY MATRIX */}
       <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
-            <FileText className="w-4 h-4" />
-            <span>Section 3: Detailed SSCM Measurement & Quantity Sheet (4 Surface Options + LHS & RHS Inputs)</span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Section 3: SSCM Measurement Matrix (Selectable Surface Sections)</span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Toggle surface sections ON/OFF below to customize entry columns and quickly enter LHS/RHS values
+            </p>
           </div>
-          <span className="text-xs text-slate-400">Total SSCM Line Items: <span className="text-amber-400 font-bold">{items.length}</span></span>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={showAllSections}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 border border-slate-700 cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5 text-amber-400" />
+              <span>Show All 4 Sections</span>
+            </button>
+          </div>
         </div>
 
-        {/* 4 SURFACE SECTIONS TABLE MATRIX WITH LHS / RHS COLUMNS */}
+        {/* OPTIONAL SURFACE SECTION SELECTION TOGGLE PILLS */}
+        <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center gap-3 text-xs">
+          <span className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider flex items-center gap-1">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+            <span>Visible Surface Sections:</span>
+          </span>
+
+          {/* Toggle 1: Gravel Section */}
+          <button
+            onClick={() => toggleSection('gravel')}
+            onDoubleClick={() => selectSingleSection('gravel')}
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              visibleSections.gravel
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
+                : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${visibleSections.gravel ? 'bg-amber-400' : 'bg-slate-600'}`}></span>
+            <span>1. Gravel Section</span>
+          </button>
+
+          {/* Toggle 2: AC / Tar Surface */}
+          <button
+            onClick={() => toggleSection('asphalt')}
+            onDoubleClick={() => selectSingleSection('asphalt')}
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              visibleSections.asphalt
+                ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-sm'
+                : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${visibleSections.asphalt ? 'bg-blue-400' : 'bg-slate-600'}`}></span>
+            <span>2. AC / Macadam / Tar</span>
+          </button>
+
+          {/* Toggle 3: Concrete Surface */}
+          <button
+            onClick={() => toggleSection('concrete')}
+            onDoubleClick={() => selectSingleSection('concrete')}
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              visibleSections.concrete
+                ? 'bg-purple-500/20 text-purple-400 border-purple-500/40 shadow-sm'
+                : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${visibleSections.concrete ? 'bg-purple-400' : 'bg-slate-600'}`}></span>
+            <span>3. Concrete Surface</span>
+          </button>
+
+          {/* Toggle 4: Interlock Section */}
+          <button
+            onClick={() => toggleSection('interlock')}
+            onDoubleClick={() => selectSingleSection('interlock')}
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              visibleSections.interlock
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm'
+                : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${visibleSections.interlock ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
+            <span>4. Interlock Paved</span>
+          </button>
+        </div>
+
+        {/* DYNAMIC OPTIONAL SURFACE SECTIONS TABLE MATRIX */}
         <div className="overflow-x-auto rounded-xl border border-slate-800">
           <table className="w-full text-left text-[11px] text-slate-300">
-            {/* Header Row 1: 4 Road Surface Sections */}
+            {/* Header Row 1: Active Road Surface Sections */}
             <thead className="bg-slate-900 text-slate-200 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th colSpan={3} className="py-3 px-3 border-r border-slate-800 bg-slate-950 text-amber-400 font-extrabold text-xs">
                   SSCM Item & Description
                 </th>
                 
-                {/* Surface Section 1: Gravel Section */}
-                <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-amber-500/10 text-amber-400 border-t-2 border-t-amber-500">
-                  1. Gravel Section
-                </th>
+                {/* Gravel Section */}
+                {visibleSections.gravel && (
+                  <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-amber-500/10 text-amber-400 border-t-2 border-t-amber-500">
+                    1. Gravel Section
+                  </th>
+                )}
 
-                {/* Surface Section 2: AC, Macadam, DBST, Tar Surface */}
-                <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-blue-500/10 text-blue-400 border-t-2 border-t-blue-500">
-                  2. AC, Macadam, DBST, Tar Surface
-                </th>
+                {/* Tar / Asphalt Surface Section */}
+                {visibleSections.asphalt && (
+                  <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-blue-500/10 text-blue-400 border-t-2 border-t-blue-500">
+                    2. AC, Macadam, Tar Surface
+                  </th>
+                )}
 
-                {/* Surface Section 3: Concrete Surface */}
-                <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-purple-500/10 text-purple-400 border-t-2 border-t-purple-500">
-                  3. Concrete Surface Section
-                </th>
+                {/* Concrete Surface Section */}
+                {visibleSections.concrete && (
+                  <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-purple-500/10 text-purple-400 border-t-2 border-t-purple-500">
+                    3. Concrete Surface Section
+                  </th>
+                )}
 
-                {/* Surface Section 4: Interlock Paved Section */}
-                <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-emerald-500/10 text-emerald-400 border-t-2 border-t-emerald-500">
-                  4. Interlock Paved Section
-                </th>
+                {/* Interlock Paved Section */}
+                {visibleSections.interlock && (
+                  <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-emerald-500/10 text-emerald-400 border-t-2 border-t-emerald-500">
+                    4. Interlock Paved Section
+                  </th>
+                )}
 
                 {/* Overall Total Quantity */}
                 <th className="py-2.5 px-3 text-right bg-slate-950 text-amber-400 border-t-2 border-t-amber-400 font-extrabold text-xs">
@@ -322,34 +443,49 @@ export default function DetailSheetView() {
                 </th>
               </tr>
 
-              {/* Header Row 2: LHS and RHS Columns under each of the 4 Sections */}
+              {/* Header Row 2: LHS and RHS Sub-Columns */}
               <tr className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-[9px]">
                 <th className="py-2 px-2 w-12 border-r border-slate-800">Item</th>
                 <th className="py-2 px-3 border-r border-slate-800">Description of Work</th>
                 <th className="py-2 px-2 text-center border-r border-slate-800">Unit</th>
 
                 {/* Gravel LHS / RHS */}
-                <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-amber-500/5">LHS</th>
-                <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-amber-500/5">RHS</th>
+                {visibleSections.gravel && (
+                  <>
+                    <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-amber-500/5">LHS</th>
+                    <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-amber-500/5">RHS</th>
+                  </>
+                )}
 
                 {/* Tar/Asphalt LHS / RHS */}
-                <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-blue-500/5">LHS</th>
-                <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-blue-500/5">RHS</th>
+                {visibleSections.asphalt && (
+                  <>
+                    <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-blue-500/5">LHS</th>
+                    <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-blue-500/5">RHS</th>
+                  </>
+                )}
 
                 {/* Concrete LHS / RHS */}
-                <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-purple-500/5">LHS</th>
-                <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-purple-500/5">RHS</th>
+                {visibleSections.concrete && (
+                  <>
+                    <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-purple-500/5">LHS</th>
+                    <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-purple-500/5">RHS</th>
+                  </>
+                )}
 
                 {/* Interlock LHS / RHS */}
-                <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-emerald-500/5">LHS</th>
-                <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-emerald-500/5">RHS</th>
+                {visibleSections.interlock && (
+                  <>
+                    <th className="py-1.5 px-2 text-center border-r border-slate-800/60 bg-emerald-500/5">LHS</th>
+                    <th className="py-1.5 px-2 text-center border-r border-slate-800 bg-emerald-500/5">RHS</th>
+                  </>
+                )}
 
-                {/* Total */}
                 <th className="py-1.5 px-3 text-right bg-slate-950">Grand Total</th>
               </tr>
             </thead>
 
-            {/* Table Body with LHS & RHS Input Fields */}
+            {/* Table Body */}
             <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
               {items.map((it, idx) => {
                 const itemKey = it.item_no + '_' + it.description;
@@ -373,85 +509,101 @@ export default function DetailSheetView() {
                     <td className="py-2 px-3 font-medium text-slate-100 border-r border-slate-800">{it.description}</td>
                     <td className="py-2 px-2 text-center text-slate-400 border-r border-slate-800">{it.unit}</td>
 
-                    {/* Gravel Section LHS / RHS */}
-                    <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-amber-500/5">
-                      <input 
-                        type="number" 
-                        value={m.gravel_lhs || ''} 
-                        onChange={(e) => handleInputChange(itemKey, 'gravel_lhs', e.target.value)}
-                        placeholder="0"
-                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-amber-500"
-                      />
-                    </td>
-                    <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-amber-500/5">
-                      <input 
-                        type="number" 
-                        value={m.gravel_rhs || ''} 
-                        onChange={(e) => handleInputChange(itemKey, 'gravel_rhs', e.target.value)}
-                        placeholder="0"
-                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-amber-500"
-                      />
-                    </td>
+                    {/* Gravel Inputs */}
+                    {visibleSections.gravel && (
+                      <>
+                        <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-amber-500/5">
+                          <input 
+                            type="number" 
+                            value={m.gravel_lhs || ''} 
+                            onChange={(e) => handleInputChange(itemKey, 'gravel_lhs', e.target.value)}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-amber-500 focus:bg-slate-950 font-semibold"
+                          />
+                        </td>
+                        <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-amber-500/5">
+                          <input 
+                            type="number" 
+                            value={m.gravel_rhs || ''} 
+                            onChange={(e) => handleInputChange(itemKey, 'gravel_rhs', e.target.value)}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-amber-500 focus:bg-slate-950 font-semibold"
+                          />
+                        </td>
+                      </>
+                    )}
 
-                    {/* AC / Tar Section LHS / RHS */}
-                    <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-blue-500/5">
-                      <input 
-                        type="number" 
-                        value={m.asphalt_lhs || ''} 
-                        onChange={(e) => handleInputChange(itemKey, 'asphalt_lhs', e.target.value)}
-                        placeholder="0"
-                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-blue-500"
-                      />
-                    </td>
-                    <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-blue-500/5">
-                      <input 
-                        type="number" 
-                        value={m.asphalt_rhs || ''} 
-                        onChange={(e) => handleInputChange(itemKey, 'asphalt_rhs', e.target.value)}
-                        placeholder="0"
-                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-blue-500"
-                      />
-                    </td>
+                    {/* Tar/Asphalt Inputs */}
+                    {visibleSections.asphalt && (
+                      <>
+                        <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-blue-500/5">
+                          <input 
+                            type="number" 
+                            value={m.asphalt_lhs || ''} 
+                            onChange={(e) => handleInputChange(itemKey, 'asphalt_lhs', e.target.value)}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-blue-500 focus:bg-slate-950 font-semibold"
+                          />
+                        </td>
+                        <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-blue-500/5">
+                          <input 
+                            type="number" 
+                            value={m.asphalt_rhs || ''} 
+                            onChange={(e) => handleInputChange(itemKey, 'asphalt_rhs', e.target.value)}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-blue-500 focus:bg-slate-950 font-semibold"
+                          />
+                        </td>
+                      </>
+                    )}
 
-                    {/* Concrete Section LHS / RHS */}
-                    <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-purple-500/5">
-                      <input 
-                        type="number" 
-                        value={m.concrete_lhs || ''} 
-                        onChange={(e) => handleInputChange(itemKey, 'concrete_lhs', e.target.value)}
-                        placeholder="0"
-                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-purple-500"
-                      />
-                    </td>
-                    <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-purple-500/5">
-                      <input 
-                        type="number" 
-                        value={m.concrete_rhs || ''} 
-                        onChange={(e) => handleInputChange(itemKey, 'concrete_rhs', e.target.value)}
-                        placeholder="0"
-                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-purple-500"
-                      />
-                    </td>
+                    {/* Concrete Inputs */}
+                    {visibleSections.concrete && (
+                      <>
+                        <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-purple-500/5">
+                          <input 
+                            type="number" 
+                            value={m.concrete_lhs || ''} 
+                            onChange={(e) => handleInputChange(itemKey, 'concrete_lhs', e.target.value)}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-purple-500 focus:bg-slate-950 font-semibold"
+                          />
+                        </td>
+                        <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-purple-500/5">
+                          <input 
+                            type="number" 
+                            value={m.concrete_rhs || ''} 
+                            onChange={(e) => handleInputChange(itemKey, 'concrete_rhs', e.target.value)}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-purple-500 focus:bg-slate-950 font-semibold"
+                          />
+                        </td>
+                      </>
+                    )}
 
-                    {/* Interlock Section LHS / RHS */}
-                    <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-emerald-500/5">
-                      <input 
-                        type="number" 
-                        value={m.interlock_lhs || ''} 
-                        onChange={(e) => handleInputChange(itemKey, 'interlock_lhs', e.target.value)}
-                        placeholder="0"
-                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-emerald-500"
-                      />
-                    </td>
-                    <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-emerald-500/5">
-                      <input 
-                        type="number" 
-                        value={m.interlock_rhs || ''} 
-                        onChange={(e) => handleInputChange(itemKey, 'interlock_rhs', e.target.value)}
-                        placeholder="0"
-                        className="w-14 px-1 py-0.5 bg-slate-900 border border-slate-700/80 rounded text-right font-mono text-slate-200 text-[10px] focus:border-emerald-500"
-                      />
-                    </td>
+                    {/* Interlock Inputs */}
+                    {visibleSections.interlock && (
+                      <>
+                        <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-emerald-500/5">
+                          <input 
+                            type="number" 
+                            value={m.interlock_lhs || ''} 
+                            onChange={(e) => handleInputChange(itemKey, 'interlock_lhs', e.target.value)}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-emerald-500 focus:bg-slate-950 font-semibold"
+                          />
+                        </td>
+                        <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-emerald-500/5">
+                          <input 
+                            type="number" 
+                            value={m.interlock_rhs || ''} 
+                            onChange={(e) => handleInputChange(itemKey, 'interlock_rhs', e.target.value)}
+                            placeholder="0"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-emerald-500 focus:bg-slate-950 font-semibold"
+                          />
+                        </td>
+                      </>
+                    )}
 
                     {/* Calculated Grand Total */}
                     <td className="py-2 px-3 text-right font-mono font-bold text-amber-400 bg-slate-950">
