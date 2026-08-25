@@ -1,8 +1,9 @@
-# Restricted / Sensitive Excel Files
+# Restricted / Sensitive Excel & Document Files
 *.xlsx
 *.xlsm
 *.xls
 *.csv
+*.pdf
 
 # Node / Frontend
 frontend/node_modules/
