@@ -896,44 +896,7 @@ export default function DetailSheetView() {
         </div>
       </div>
 
-      {/* SECTION SPECIFICATIONS & DESCRIPTIONS CARD BLOCK */}
-      <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
-            <BookOpen className="w-4 h-4" />
-            <span>RDA Engineering Section Standard Specifications (SSCM Reference)</span>
-          </div>
-          <span className="text-xs text-slate-400">Click any section card to inspect technical specs</span>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {Object.entries(SECTION_DESCRIPTIONS).map(([secKey, sInfo]) => (
-            <div 
-              key={secKey} 
-              onClick={() => setSelectedCategoryInfo(sInfo)}
-              className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                selectedCategoryInfo?.title === sInfo.title 
-                  ? 'bg-amber-500/10 border-amber-500/50 shadow-md ring-1 ring-amber-500/30'
-                  : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-bold text-slate-200 text-xs">{sInfo.title}</span>
-                <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 rounded">
-                  {sInfo.code}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                {sInfo.desc}
-              </p>
-              <div className="mt-2 text-[10px] text-amber-400 font-medium flex items-center gap-1">
-                <Info className="w-3 h-3" />
-                <span>{sInfo.specs}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* SECTION 3: OPTIONAL SURFACE SECTIONS TOGGLE, DESCRIPTION SEARCH & ENTRY MATRIX */}
       <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
