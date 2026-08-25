@@ -163,9 +163,9 @@ def get_detail_sheet_structure(sheet_name: str):
         if c0 in ["3.1.2", "3.1.3"] or (c0 and not unit and c1 in ["Edge Widening", "Shoulder Excavation"]):
             is_sub_item_header = True
 
-        # Determine if category needs LHS/RHS sub-headers (like 2.2 Removal of Trees, 3.1 Roadway Excavation, Drains, Retaining Walls)
+        # Determine if category needs LHS/RHS sub-headers (like Removal of Trees, Roadway Excavation, Rock Blasting 3.4, Drains, Retaining Walls)
         needs_lhs_rhs = False
-        if "Removal of Trees" in current_category or "Trees" in current_category or "Roadway Excavation" in current_category or "Excavation" in current_category or "Drain" in current_category or "Wall" in current_category or "2.2" in current_category or "3.1" in current_category:
+        if "Removal of Trees" in current_category or "Trees" in current_category or "Roadway Excavation" in current_category or "Excavation" in current_category or "Rock Blasting" in current_category or "Blasting" in current_category or "Chemical" in current_category or "Drain" in current_category or "Wall" in current_category or c0 in ["2.2", "3.1", "3.3", "3.4", "3.5", "3.6"]:
             needs_lhs_rhs = True
 
         # Check if single value row (like Clearing & Grubbing Cumulative Area) vs LHS/RHS row
@@ -495,8 +495,10 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             banner_cell.alignment = Alignment(horizontal="left", vertical="center")
             curr_row += 1
             
-            # Sub-headers LHS/RHS for categories like Removal of Trees (2.2), Roadway Excavation (3.1), Drains, Retaining Walls
-            if "Removal of Trees" in it.description or "Roadway Excavation" in it.description or "Trees" in it.description or "Excavation" in it.description or "2.2" in it.item_no or "3.1" in it.item_no:
+            # Sub-headers LHS/RHS for categories like Removal of Trees (2.2), Roadway Excavation (3.1), Rock Blasting (3.4), Drains, Retaining Walls
+            desc_up = (it.description or "").upper()
+            item_no_clean = (it.item_no or "").strip()
+            if any(k in desc_up for k in ["TREES", "EXCAVATION", "BLASTING", "CHEMICAL", "DRAIN", "WALL", "SLIPS", "SLIDES"]) or item_no_clean in ["2.2", "3.1", "3.3", "3.4", "3.5", "3.6", "6.1", "7.1"]:
                 ws.cell(row=curr_row, column=3, value="LHS").alignment = Alignment(horizontal="center")
                 ws.cell(row=curr_row, column=4, value="RHS").alignment = Alignment(horizontal="center")
                 ws.cell(row=curr_row, column=6, value="LHS").alignment = Alignment(horizontal="center")
