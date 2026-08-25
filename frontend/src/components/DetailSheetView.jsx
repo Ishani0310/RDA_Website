@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import {
-  FileSpreadsheet,
-  Plus,
-  Save,
-  RefreshCw,
-  Truck,
-  Layers,
-  Calculator,
+import { 
+  FileSpreadsheet, 
+  Plus, 
+  Save, 
+  RefreshCw, 
+  Truck, 
+  Layers, 
+  Calculator, 
   Building2,
   FileText,
   Loader2,
@@ -22,7 +22,8 @@ import {
   Sparkles,
   Search,
   MapPin,
-  Ruler
+  Ruler,
+  Files
 } from 'lucide-react';
 
 const SECTION_DESCRIPTIONS = {
@@ -94,9 +95,11 @@ export default function DetailSheetView() {
   const [sheetData, setSheetData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exportingSingle, setExportingSingle] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [exportSuccess, setExportSuccess] = useState(false);
+  const [exportSuccessSingle, setExportSuccessSingle] = useState(false);
+  const [exportSuccessAll, setExportSuccessAll] = useState(false);
   const [selectedCategoryInfo, setSelectedCategoryInfo] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -155,7 +158,7 @@ export default function DetailSheetView() {
     try {
       const res = await axios.get(`/api/detail-sheet/${encodeURIComponent(sheetName)}`);
       setSheetData(res.data);
-
+      
       if (res.data.metadata) {
         setMetaFields(prev => ({
           ...prev,
@@ -174,9 +177,9 @@ export default function DetailSheetView() {
 
           initialMap[it.item_no + '_' + desc] = {
             val_single_gravel: 0, val_single_asphalt: 0, val_single_concrete: 0, val_single_interlock: 0,
-            gravel_lhs: desc.includes('Depth') && !it.gravel_is_na ? 0.150 : 0,
+            gravel_lhs: desc.includes('Depth') && !it.gravel_is_na ? 0.150 : 0, 
             gravel_rhs: desc.includes('Depth') && !it.gravel_is_na ? 0.150 : 0,
-            asphalt_lhs: isEdgeWideningWidth ? 0.2 : (isEdgeWideningDepth ? 0.150 : (isShoulderExcWidth ? 1 : (isShoulderExcDepth ? 0.100 : 0))),
+            asphalt_lhs: isEdgeWideningWidth ? 0.2 : (isEdgeWideningDepth ? 0.150 : (isShoulderExcWidth ? 1 : (isShoulderExcDepth ? 0.100 : 0))), 
             asphalt_rhs: isEdgeWideningWidth ? 0.2 : (isEdgeWideningDepth ? 0.150 : (isShoulderExcWidth ? 2 : (isShoulderExcDepth ? 0.100 : 0))),
             concrete_lhs: 0, concrete_rhs: 0,
             interlock_lhs: 0, interlock_rhs: 0
@@ -266,54 +269,60 @@ export default function DetailSheetView() {
     }
   };
 
-  const handleExportToExcel = async () => {
-    setExporting(true);
-    setExportSuccess(false);
-    try {
-      const itemsPayload = (sheetData?.items || []).map(it => {
-        if (it.is_header || it.is_sub_item_header) {
-          return {
-            item_no: it.item_no,
-            description: it.description,
-            unit: '',
-            is_header: it.is_header,
-            is_sub_item_header: it.is_sub_item_header,
-            is_single_value: false
-          };
-        }
-        const itemKey = it.item_no + '_' + it.description;
-        const m = itemMeasurements[itemKey] || {};
+  const buildSheetPayload = (sName) => {
+    const itemsPayload = (sheetData?.items || []).map(it => {
+      if (it.is_header || it.is_sub_item_header) {
         return {
           item_no: it.item_no,
           description: it.description,
-          unit: it.unit,
-          is_header: false,
-          is_sub_item_header: false,
-          is_sub_prop: it.is_sub_prop,
-          is_single_value: it.is_single_value !== false,
-          gravel_is_na: it.gravel_is_na || (it.description || '').includes('Total Length') || (it.description || '').includes('Avg.Width') && it.gravel_is_na,
-          val_single_gravel: m.val_single_gravel || 0,
-          val_single_asphalt: m.val_single_asphalt || 0,
-          val_single_concrete: m.val_single_concrete || 0,
-          val_single_interlock: m.val_single_interlock || 0,
-          gravel_lhs: m.gravel_lhs || 0,
-          gravel_rhs: m.gravel_rhs || 0,
-          asphalt_lhs: m.asphalt_lhs || 0,
-          asphalt_rhs: m.asphalt_rhs || 0,
-          concrete_lhs: m.concrete_lhs || 0,
-          concrete_rhs: m.concrete_rhs || 0,
-          interlock_lhs: m.interlock_lhs || 0,
-          interlock_rhs: m.interlock_rhs || 0
+          unit: '',
+          is_header: it.is_header,
+          is_sub_item_header: it.is_sub_item_header,
+          is_single_value: false
         };
-      });
+      }
+      const itemKey = it.item_no + '_' + it.description;
+      const m = itemMeasurements[itemKey] || {};
+      return {
+        item_no: it.item_no,
+        description: it.description,
+        unit: it.unit,
+        is_header: false,
+        is_sub_item_header: false,
+        is_sub_prop: it.is_sub_prop,
+        is_single_value: it.is_single_value !== false,
+        gravel_is_na: it.gravel_is_na || (it.description || '').includes('Total Length') || (it.description || '').includes('Avg.Width') && it.gravel_is_na,
+        val_single_gravel: m.val_single_gravel || 0,
+        val_single_asphalt: m.val_single_asphalt || 0,
+        val_single_concrete: m.val_single_concrete || 0,
+        val_single_interlock: m.val_single_interlock || 0,
+        gravel_lhs: m.gravel_lhs || 0,
+        gravel_rhs: m.gravel_rhs || 0,
+        asphalt_lhs: m.asphalt_lhs || 0,
+        asphalt_rhs: m.asphalt_rhs || 0,
+        concrete_lhs: m.concrete_lhs || 0,
+        concrete_rhs: m.concrete_rhs || 0,
+        interlock_lhs: m.interlock_lhs || 0,
+        interlock_rhs: m.interlock_rhs || 0
+      };
+    });
 
-      const response = await axios.post('/api/detail-sheet/export', {
-        sheet_name: selectedSheet,
-        metadata: metaFields,
-        surface_dimensions: surfaceDimensions,
-        transport_distances: sheetData?.transport_distances || [],
-        items: itemsPayload
-      }, {
+    return {
+      sheet_name: sName,
+      metadata: metaFields,
+      surface_dimensions: surfaceDimensions,
+      transport_distances: sheetData?.transport_distances || [],
+      items: itemsPayload
+    };
+  };
+
+  // EXPORT SINGLE SEPARATE DETAIL SHEET
+  const handleExportSingleToExcel = async () => {
+    setExportingSingle(true);
+    setExportSuccessSingle(false);
+    try {
+      const payload = buildSheetPayload(selectedSheet);
+      const response = await axios.post('/api/detail-sheet/export', payload, {
         responseType: 'blob'
       });
 
@@ -326,12 +335,43 @@ export default function DetailSheetView() {
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      setExportSuccess(true);
-      setTimeout(() => setExportSuccess(false), 4000);
+      setExportSuccessSingle(true);
+      setTimeout(() => setExportSuccessSingle(false), 4000);
     } catch (err) {
-      console.error('Error exporting detail sheet to Excel:', err);
+      console.error('Error exporting single detail sheet to Excel:', err);
     } finally {
-      setExporting(false);
+      setExportingSingle(false);
+    }
+  };
+
+  // EXPORT ALL DETAIL SHEETS IN ONE COMBINED EXCEL FILE (MULTIPLE WORKSHEET TABS)
+  const handleExportAllToExcel = async () => {
+    setExportingAll(true);
+    setExportSuccessAll(false);
+    try {
+      const allSheetsPayload = detailSheets.map(sName => buildSheetPayload(sName));
+
+      const response = await axios.post('/api/detail-sheet/export-all', {
+        sheets: allSheetsPayload
+      }, {
+        responseType: 'blob'
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'RDA_ALL_DETAIL_SHEETS_COMBINED.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setExportSuccessAll(true);
+      setTimeout(() => setExportSuccessAll(false), 4000);
+    } catch (err) {
+      console.error('Error exporting all detail sheets to Excel:', err);
+    } finally {
+      setExportingAll(false);
     }
   };
 
@@ -357,10 +397,10 @@ export default function DetailSheetView() {
     );
   });
 
-  const activeColCount = 3 +
-    (visibleSections.gravel ? 2 : 0) +
-    (visibleSections.asphalt ? 2 : 0) +
-    (visibleSections.concrete ? 2 : 0) +
+  const activeColCount = 3 + 
+    (visibleSections.gravel ? 2 : 0) + 
+    (visibleSections.asphalt ? 2 : 0) + 
+    (visibleSections.concrete ? 2 : 0) + 
     (visibleSections.interlock ? 2 : 0) + 1;
 
   const totalLengthM = surfaceDimensions.gravel_len + surfaceDimensions.asphalt_len + surfaceDimensions.concrete_len + surfaceDimensions.interlock_len;
@@ -376,48 +416,77 @@ export default function DetailSheetView() {
               <h2 className="text-xl font-bold text-white">RDA Detail Sheets (Road Data & Quantity Builder)</h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              3.1 Roadway Excavation, 3.1.1 Cut Slope Volume, 3.1.2 Edge Widening (N/A Gravel), & 3.1.3 Shoulder Excavation
+              Export active sheet separately or download all detail sheets in 1 combined Excel workbook
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleExportToExcel}
-              disabled={exporting}
-              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          {/* DUAL EXPORT OPTIONS: ALL IN 1 COMBINED VS SEPARATE ACTIVE SHEET */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* BUTTON 1: DOWNLOAD ALL DETAIL SHEETS IN 1 COMBINED EXCEL FILE */}
+            <button 
+              onClick={handleExportAllToExcel}
+              disabled={exportingAll}
+              className="px-3.5 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Download all detail sheets (Detail -1, Detail -2, etc.) as multiple tabs in 1 combined Excel workbook"
             >
-              {exporting ? (
+              {exportingAll ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>Generating Excel...</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Generating Combined Excel...</span>
                 </>
-              ) : exportSuccess ? (
+              ) : exportSuccessAll ? (
                 <>
-                  <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                  <span>Excel Exported!</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                  <span>All Sheets Exported!</span>
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
-                  <span>Submit & Export to Excel (.xlsx)</span>
+                  <Files className="w-4 h-4 text-blue-200" />
+                  <span>Download ALL Sheets (1 Combined File)</span>
                 </>
               )}
             </button>
 
-            <button
+            {/* BUTTON 2: DOWNLOAD ACTIVE SINGLE DETAIL SHEET ONLY */}
+            <button 
+              onClick={handleExportSingleToExcel}
+              disabled={exportingSingle}
+              className="px-3.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title={`Download only current active sheet (${selectedSheet}) as a separate Excel file`}
+            >
+              {exportingSingle ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                  <span>Generating Sheet...</span>
+                </>
+              ) : exportSuccessSingle ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                  <span>Sheet Exported!</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 text-slate-950" />
+                  <span>Download Active Sheet ({selectedSheet})</span>
+                </>
+              )}
+            </button>
+
+            {/* BUTTON 3: CREATE NEW DETAIL SHEET */}
+            <button 
               onClick={openCreateModal}
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>+ Create Detail Sheet</span>
             </button>
 
-            <button
+            <button 
               onClick={() => fetchDetailSheet(selectedSheet)}
-              className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer"
+              className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-              <span>Refresh Structure</span>
+              <span>Refresh</span>
             </button>
           </div>
         </div>
@@ -428,10 +497,11 @@ export default function DetailSheetView() {
             <button
               key={sName}
               onClick={() => setSelectedSheet(sName)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${selectedSheet === sName
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                selectedSheet === sName
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
                   : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
-                }`}
+              }`}
             >
               {sName}
             </button>
@@ -482,8 +552,8 @@ export default function DetailSheetView() {
               <MapPin className="w-3 h-3 text-amber-400" />
               <span>1. Province</span>
             </label>
-            <select
-              value={metaFields.province}
+            <select 
+              value={metaFields.province} 
               onChange={(e) => handleMetaChange('province', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500 focus:outline-none"
             >
@@ -501,9 +571,9 @@ export default function DetailSheetView() {
 
           <div>
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">2. EE Division</label>
-            <input
-              type="text"
-              value={metaFields.ee_division}
+            <input 
+              type="text" 
+              value={metaFields.ee_division} 
               onChange={(e) => handleMetaChange('ee_division', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500"
             />
@@ -511,9 +581,9 @@ export default function DetailSheetView() {
 
           <div>
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">3. CE Division</label>
-            <input
-              type="text"
-              value={metaFields.ce_division}
+            <input 
+              type="text" 
+              value={metaFields.ce_division} 
               onChange={(e) => handleMetaChange('ce_division', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500"
             />
@@ -521,9 +591,9 @@ export default function DetailSheetView() {
 
           <div>
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">4. Electorate/s</label>
-            <input
-              type="text"
-              value={metaFields.electorate}
+            <input 
+              type="text" 
+              value={metaFields.electorate} 
               onChange={(e) => handleMetaChange('electorate', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500"
             />
@@ -531,9 +601,9 @@ export default function DetailSheetView() {
 
           <div className="md:col-span-2">
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">5. Project Name</label>
-            <input
-              type="text"
-              value={metaFields.project_name}
+            <input 
+              type="text" 
+              value={metaFields.project_name} 
               onChange={(e) => handleMetaChange('project_name', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-amber-400 font-medium focus:border-amber-500"
             />
@@ -541,9 +611,9 @@ export default function DetailSheetView() {
 
           <div className="md:col-span-2 lg:col-span-3">
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">6. Road Name</label>
-            <input
-              type="text"
-              value={metaFields.road_name}
+            <input 
+              type="text" 
+              value={metaFields.road_name} 
               onChange={(e) => handleMetaChange('road_name', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-medium focus:border-amber-500"
             />
@@ -551,9 +621,9 @@ export default function DetailSheetView() {
 
           <div>
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">7. Road Class and Number</label>
-            <input
-              type="text"
-              value={metaFields.road_class_and_number}
+            <input 
+              type="text" 
+              value={metaFields.road_class_and_number} 
               onChange={(e) => handleMetaChange('road_class_and_number', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-mono font-medium focus:border-amber-500"
             />
@@ -561,9 +631,9 @@ export default function DetailSheetView() {
 
           <div className="md:col-span-2">
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">8. Road Improvement Type</label>
-            <input
-              type="text"
-              value={metaFields.road_improvement_type}
+            <input 
+              type="text" 
+              value={metaFields.road_improvement_type} 
               onChange={(e) => handleMetaChange('road_improvement_type', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500"
             />
@@ -571,9 +641,9 @@ export default function DetailSheetView() {
 
           <div>
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">9. Road Length</label>
-            <input
-              type="text"
-              value={metaFields.road_length}
+            <input 
+              type="text" 
+              value={metaFields.road_length} 
               onChange={(e) => handleMetaChange('road_length', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-amber-400 font-mono font-bold focus:border-amber-500"
             />
@@ -581,9 +651,9 @@ export default function DetailSheetView() {
 
           <div>
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">10. Avg. Road Width (Existing)</label>
-            <input
-              type="text"
-              value={metaFields.avg_road_width_existing}
+            <input 
+              type="text" 
+              value={metaFields.avg_road_width_existing} 
               onChange={(e) => handleMetaChange('avg_road_width_existing', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-emerald-400 font-mono font-bold focus:border-amber-500"
             />
@@ -591,9 +661,9 @@ export default function DetailSheetView() {
 
           <div>
             <label className="block text-slate-400 text-[11px] mb-1 font-bold">11. Road width (Proposed)</label>
-            <input
-              type="text"
-              value={metaFields.road_width_proposed}
+            <input 
+              type="text" 
+              value={metaFields.road_width_proposed} 
               onChange={(e) => handleMetaChange('road_width_proposed', e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-amber-400 font-mono font-bold focus:border-amber-500"
             />
@@ -616,9 +686,9 @@ export default function DetailSheetView() {
                 <div className="text-[11px] text-slate-400">Transport haulage distance</div>
               </div>
               <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  defaultValue={dist.distance_km}
+                <input 
+                  type="number" 
+                  defaultValue={dist.distance_km} 
                   className="w-16 px-2 py-1 bg-slate-950 border border-slate-700 rounded text-right font-mono font-bold text-amber-400 text-xs"
                 />
                 <span className="text-slate-400 font-semibold">{dist.unit}</span>
@@ -671,9 +741,9 @@ export default function DetailSheetView() {
                 <td className="py-2.5 px-3 font-bold text-slate-200 border-r border-slate-800 bg-slate-900/60">Length</td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-amber-500/5">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.gravel_len}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.gravel_len} 
                       onChange={(e) => handleDimensionChange('gravel_len', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono font-bold text-amber-400"
                     />
@@ -682,9 +752,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-blue-500/5">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.asphalt_len}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.asphalt_len} 
                       onChange={(e) => handleDimensionChange('asphalt_len', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono font-bold text-blue-400"
                     />
@@ -693,9 +763,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-purple-500/5">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.concrete_len}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.concrete_len} 
                       onChange={(e) => handleDimensionChange('concrete_len', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono font-bold text-purple-400"
                     />
@@ -704,9 +774,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/5">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.interlock_len}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.interlock_len} 
                       onChange={(e) => handleDimensionChange('interlock_len', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono font-bold text-emerald-400"
                     />
@@ -723,9 +793,9 @@ export default function DetailSheetView() {
                 <td className="py-2.5 px-3 font-bold text-emerald-300 border-r border-slate-800 bg-emerald-900/40">Proposed Width</td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/10">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.gravel_prop_w}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.gravel_prop_w} 
                       onChange={(e) => handleDimensionChange('gravel_prop_w', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-emerald-700 rounded text-right font-mono font-bold text-emerald-300"
                     />
@@ -734,9 +804,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/10">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.asphalt_prop_w}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.asphalt_prop_w} 
                       onChange={(e) => handleDimensionChange('asphalt_prop_w', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-emerald-700 rounded text-right font-mono font-bold text-emerald-300"
                     />
@@ -745,9 +815,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/10">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.concrete_prop_w}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.concrete_prop_w} 
                       onChange={(e) => handleDimensionChange('concrete_prop_w', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-emerald-700 rounded text-right font-mono font-bold text-emerald-300"
                     />
@@ -756,9 +826,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/10">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.interlock_prop_w}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.interlock_prop_w} 
                       onChange={(e) => handleDimensionChange('interlock_prop_w', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-emerald-700 rounded text-right font-mono font-bold text-emerald-300"
                     />
@@ -775,9 +845,9 @@ export default function DetailSheetView() {
                 <td className="py-2.5 px-3 font-bold text-emerald-300 border-r border-slate-800 bg-emerald-900/30">Avg.Existing Width</td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/10">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.gravel_exist_w}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.gravel_exist_w} 
                       onChange={(e) => handleDimensionChange('gravel_exist_w', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-emerald-700 rounded text-right font-mono font-bold text-emerald-300"
                     />
@@ -786,9 +856,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/10">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.asphalt_exist_w}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.asphalt_exist_w} 
                       onChange={(e) => handleDimensionChange('asphalt_exist_w', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-emerald-700 rounded text-right font-mono font-bold text-emerald-300"
                     />
@@ -797,9 +867,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/10">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.concrete_exist_w}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.concrete_exist_w} 
                       onChange={(e) => handleDimensionChange('concrete_exist_w', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-emerald-700 rounded text-right font-mono font-bold text-emerald-300"
                     />
@@ -808,9 +878,9 @@ export default function DetailSheetView() {
                 </td>
                 <td className="py-2 px-2 border-r border-slate-800 text-center bg-emerald-500/10">
                   <div className="flex items-center justify-center gap-1">
-                    <input
-                      type="number"
-                      value={surfaceDimensions.interlock_exist_w}
+                    <input 
+                      type="number" 
+                      value={surfaceDimensions.interlock_exist_w} 
                       onChange={(e) => handleDimensionChange('interlock_exist_w', e.target.value)}
                       className="w-20 px-2 py-1 bg-slate-900 border border-emerald-700 rounded text-right font-mono font-bold text-emerald-300"
                     />
@@ -838,13 +908,14 @@ export default function DetailSheetView() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {Object.entries(SECTION_DESCRIPTIONS).map(([secKey, sInfo]) => (
-            <div
-              key={secKey}
+            <div 
+              key={secKey} 
               onClick={() => setSelectedCategoryInfo(sInfo)}
-              className={`p-3.5 rounded-xl border transition-all cursor-pointer ${selectedCategoryInfo?.title === sInfo.title
+              className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                selectedCategoryInfo?.title === sInfo.title 
                   ? 'bg-amber-500/10 border-amber-500/50 shadow-md ring-1 ring-amber-500/30'
                   : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
-                }`}
+              }`}
             >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="font-bold text-slate-200 text-xs">{sInfo.title}</span>
@@ -873,7 +944,7 @@ export default function DetailSheetView() {
               <span>Section 3: SSCM Measurement Matrix ({filteredItems.length} Descriptions Loaded)</span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              3.1 Roadway Excavation: 3.1.1 Cut Slope Volume, 3.1.2 Edge Widening, 3.1.3 Shoulder Excavation
+              Dual LHS & RHS Inputs for 3.4 Rock Blasting Using Chemical Cumulative Volume
             </p>
           </div>
 
@@ -881,8 +952,8 @@ export default function DetailSheetView() {
             {/* SEARCH DESCRIPTION INPUT */}
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
+              <input 
+                type="text" 
                 placeholder="Search pay item description..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -910,10 +981,11 @@ export default function DetailSheetView() {
           <button
             onClick={() => toggleSection('gravel')}
             onDoubleClick={() => selectSingleSection('gravel')}
-            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${visibleSections.gravel
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              visibleSections.gravel
                 ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
                 : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
-              }`}
+            }`}
           >
             <span className={`w-2 h-2 rounded-full ${visibleSections.gravel ? 'bg-amber-400' : 'bg-slate-600'}`}></span>
             <span>1. Gravel Section</span>
@@ -922,10 +994,11 @@ export default function DetailSheetView() {
           <button
             onClick={() => toggleSection('asphalt')}
             onDoubleClick={() => selectSingleSection('asphalt')}
-            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${visibleSections.asphalt
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              visibleSections.asphalt
                 ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-sm'
                 : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
-              }`}
+            }`}
           >
             <span className={`w-2 h-2 rounded-full ${visibleSections.asphalt ? 'bg-blue-400' : 'bg-slate-600'}`}></span>
             <span>2. AC / Macadam / Tar</span>
@@ -934,10 +1007,11 @@ export default function DetailSheetView() {
           <button
             onClick={() => toggleSection('concrete')}
             onDoubleClick={() => selectSingleSection('concrete')}
-            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${visibleSections.concrete
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              visibleSections.concrete
                 ? 'bg-purple-500/20 text-purple-400 border-purple-500/40 shadow-sm'
                 : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
-              }`}
+            }`}
           >
             <span className={`w-2 h-2 rounded-full ${visibleSections.concrete ? 'bg-purple-400' : 'bg-slate-600'}`}></span>
             <span>3. Concrete Surface</span>
@@ -946,10 +1020,11 @@ export default function DetailSheetView() {
           <button
             onClick={() => toggleSection('interlock')}
             onDoubleClick={() => selectSingleSection('interlock')}
-            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${visibleSections.interlock
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              visibleSections.interlock
                 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm'
                 : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
-              }`}
+            }`}
           >
             <span className={`w-2 h-2 rounded-full ${visibleSections.interlock ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
             <span>4. Interlock Paved</span>
@@ -964,7 +1039,7 @@ export default function DetailSheetView() {
                 <th colSpan={3} className="py-3 px-3 border-r border-slate-800 bg-slate-950 text-amber-400 font-extrabold text-xs">
                   SSCM Item & Full Description of Work
                 </th>
-
+                
                 {visibleSections.gravel && (
                   <th colSpan={2} className="py-2.5 px-2 text-center border-r border-slate-800 bg-amber-500/10 text-amber-400 border-t-2 border-t-amber-500">
                     1. Gravel Section
@@ -1078,7 +1153,7 @@ export default function DetailSheetView() {
                 const itemKey = itemNoStr + '_' + descStr;
                 const m = itemMeasurements[itemKey] || {
                   val_single_gravel: 0, val_single_asphalt: 0, val_single_concrete: 0, val_single_interlock: 0,
-                  gravel_lhs: descStr.includes('Depth') && !it.gravel_is_na ? 0.150 : 0,
+                  gravel_lhs: descStr.includes('Depth') && !it.gravel_is_na ? 0.150 : 0, 
                   gravel_rhs: descStr.includes('Depth') && !it.gravel_is_na ? 0.150 : 0,
                   asphalt_lhs: 0, asphalt_rhs: 0,
                   concrete_lhs: 0, concrete_rhs: 0,
@@ -1117,9 +1192,9 @@ export default function DetailSheetView() {
                       {visibleSections.gravel && (
                         <td colSpan={2} className="py-1.5 px-2 text-center border-r border-slate-800 bg-amber-500/5">
                           <div className="flex items-center justify-center gap-1.5">
-                            <input
-                              type="number"
-                              value={m.val_single_gravel || ''}
+                            <input 
+                              type="number" 
+                              value={m.val_single_gravel || ''} 
                               onChange={(e) => handleInputChange(itemKey, 'val_single_gravel', e.target.value)}
                               placeholder="0"
                               className="w-24 px-2 py-1 bg-slate-900 border border-amber-600/60 rounded text-center font-mono text-amber-300 font-bold text-xs focus:bg-slate-950"
@@ -1133,9 +1208,9 @@ export default function DetailSheetView() {
                       {visibleSections.asphalt && (
                         <td colSpan={2} className="py-1.5 px-2 text-center border-r border-slate-800 bg-blue-500/5">
                           <div className="flex items-center justify-center gap-1.5">
-                            <input
-                              type="number"
-                              value={m.val_single_asphalt || ''}
+                            <input 
+                              type="number" 
+                              value={m.val_single_asphalt || ''} 
                               onChange={(e) => handleInputChange(itemKey, 'val_single_asphalt', e.target.value)}
                               placeholder="0"
                               className="w-24 px-2 py-1 bg-slate-900 border border-blue-600/60 rounded text-center font-mono text-blue-300 font-bold text-xs focus:bg-slate-950"
@@ -1149,9 +1224,9 @@ export default function DetailSheetView() {
                       {visibleSections.concrete && (
                         <td colSpan={2} className="py-1.5 px-2 text-center border-r border-slate-800 bg-purple-500/5">
                           <div className="flex items-center justify-center gap-1.5">
-                            <input
-                              type="number"
-                              value={m.val_single_concrete || ''}
+                            <input 
+                              type="number" 
+                              value={m.val_single_concrete || ''} 
                               onChange={(e) => handleInputChange(itemKey, 'val_single_concrete', e.target.value)}
                               placeholder="0"
                               className="w-24 px-2 py-1 bg-slate-900 border border-purple-600/60 rounded text-center font-mono text-purple-300 font-bold text-xs focus:bg-slate-950"
@@ -1165,9 +1240,9 @@ export default function DetailSheetView() {
                       {visibleSections.interlock && (
                         <td colSpan={2} className="py-1.5 px-2 text-center border-r border-slate-800 bg-emerald-500/5">
                           <div className="flex items-center justify-center gap-1.5">
-                            <input
-                              type="number"
-                              value={m.val_single_interlock || ''}
+                            <input 
+                              type="number" 
+                              value={m.val_single_interlock || ''} 
                               onChange={(e) => handleInputChange(itemKey, 'val_single_interlock', e.target.value)}
                               placeholder="0"
                               className="w-24 px-2 py-1 bg-slate-900 border border-emerald-600/60 rounded text-center font-mono text-emerald-300 font-bold text-xs focus:bg-slate-950"
@@ -1185,7 +1260,7 @@ export default function DetailSheetView() {
                   );
                 }
 
-                // DUAL LHS / RHS INPUT ROW (e.g. 3.1.1 Cut Slope Volume, 3.1.2 Sub-properties, 3.1.3 Sub-properties)
+                // DUAL LHS / RHS INPUT ROW (e.g. 3.4 Rock Blasting Cumulative Volume, 3.1 Roadway Excavation)
                 const gravelTotal = isGravelNA ? 0 : ((m.gravel_lhs || 0) + (m.gravel_rhs || 0));
                 const asphaltTotal = (m.asphalt_lhs || 0) + (m.asphalt_rhs || 0);
                 const concreteTotal = (m.concrete_lhs || 0) + (m.concrete_rhs || 0);
@@ -1217,18 +1292,18 @@ export default function DetailSheetView() {
                       ) : (
                         <>
                           <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-amber-500/5">
-                            <input
-                              type="number"
-                              value={m.gravel_lhs !== undefined ? m.gravel_lhs : ''}
+                            <input 
+                              type="number" 
+                              value={m.gravel_lhs !== undefined ? m.gravel_lhs : ''} 
                               onChange={(e) => handleInputChange(itemKey, 'gravel_lhs', e.target.value)}
                               placeholder="0"
                               className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-amber-500 font-semibold"
                             />
                           </td>
                           <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-amber-500/5">
-                            <input
-                              type="number"
-                              value={m.gravel_rhs !== undefined ? m.gravel_rhs : ''}
+                            <input 
+                              type="number" 
+                              value={m.gravel_rhs !== undefined ? m.gravel_rhs : ''} 
                               onChange={(e) => handleInputChange(itemKey, 'gravel_rhs', e.target.value)}
                               placeholder="0"
                               className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-amber-500 font-semibold"
@@ -1242,18 +1317,18 @@ export default function DetailSheetView() {
                     {visibleSections.asphalt && (
                       <>
                         <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-blue-500/5">
-                          <input
-                            type="number"
-                            value={m.asphalt_lhs !== undefined ? m.asphalt_lhs : ''}
+                          <input 
+                            type="number" 
+                            value={m.asphalt_lhs !== undefined ? m.asphalt_lhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'asphalt_lhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-blue-500 font-semibold"
                           />
                         </td>
                         <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-blue-500/5">
-                          <input
-                            type="number"
-                            value={m.asphalt_rhs !== undefined ? m.asphalt_rhs : ''}
+                          <input 
+                            type="number" 
+                            value={m.asphalt_rhs !== undefined ? m.asphalt_rhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'asphalt_rhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-blue-500 font-semibold"
@@ -1266,18 +1341,18 @@ export default function DetailSheetView() {
                     {visibleSections.concrete && (
                       <>
                         <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-purple-500/5">
-                          <input
-                            type="number"
-                            value={m.concrete_lhs !== undefined ? m.concrete_lhs : ''}
+                          <input 
+                            type="number" 
+                            value={m.concrete_lhs !== undefined ? m.concrete_lhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'concrete_lhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-purple-500 font-semibold"
                           />
                         </td>
                         <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-purple-500/5">
-                          <input
-                            type="number"
-                            value={m.concrete_rhs !== undefined ? m.concrete_rhs : ''}
+                          <input 
+                            type="number" 
+                            value={m.concrete_rhs !== undefined ? m.concrete_rhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'concrete_rhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-purple-500 font-semibold"
@@ -1290,18 +1365,18 @@ export default function DetailSheetView() {
                     {visibleSections.interlock && (
                       <>
                         <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-emerald-500/5">
-                          <input
-                            type="number"
-                            value={m.interlock_lhs !== undefined ? m.interlock_lhs : ''}
+                          <input 
+                            type="number" 
+                            value={m.interlock_lhs !== undefined ? m.interlock_lhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'interlock_lhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-emerald-500 font-semibold"
                           />
                         </td>
                         <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-emerald-500/5">
-                          <input
-                            type="number"
-                            value={m.interlock_rhs !== undefined ? m.interlock_rhs : ''}
+                          <input 
+                            type="number" 
+                            value={m.interlock_rhs !== undefined ? m.interlock_rhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'interlock_rhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-emerald-500 font-semibold"
@@ -1331,7 +1406,7 @@ export default function DetailSheetView() {
                 <Plus className="w-5 h-5 text-amber-400" />
                 <span>Create New Detail Sheet Structure</span>
               </h3>
-              <button
+              <button 
                 onClick={() => setShowCreateModal(false)}
                 className="text-slate-400 hover:text-white text-xs font-bold"
               >
@@ -1342,20 +1417,20 @@ export default function DetailSheetView() {
             <form onSubmit={handleCreateNewSheet} className="space-y-3 text-xs">
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Detail Sheet Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newSheetName}
-                  onChange={(e) => setNewSheetName(e.target.value)}
+                <input 
+                  type="text" 
+                  required 
+                  value={newSheetName} 
+                  onChange={(e) => setNewSheetName(e.target.value)} 
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono"
                 />
               </div>
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Province</label>
-                <select
-                  value={newProvince}
-                  onChange={(e) => setNewProvince(e.target.value)}
+                <select 
+                  value={newProvince} 
+                  onChange={(e) => setNewProvince(e.target.value)} 
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white"
                 >
                   <option value="Central">Central</option>
@@ -1369,36 +1444,36 @@ export default function DetailSheetView() {
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">District</label>
-                <input
-                  type="text"
-                  required
-                  value={newDistrict}
-                  onChange={(e) => setNewDistrict(e.target.value)}
+                <input 
+                  type="text" 
+                  required 
+                  value={newDistrict} 
+                  onChange={(e) => setNewDistrict(e.target.value)} 
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white"
                 />
               </div>
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Road Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newRoadName}
-                  onChange={(e) => setNewRoadName(e.target.value)}
+                <input 
+                  type="text" 
+                  required 
+                  value={newRoadName} 
+                  onChange={(e) => setNewRoadName(e.target.value)} 
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white"
                 />
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-3">
-                <button
-                  type="button"
+                <button 
+                  type="button" 
                   onClick={() => setShowCreateModal(false)}
                   className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
+                <button 
+                  type="submit" 
                   disabled={saving}
                   className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold cursor-pointer"
                 >

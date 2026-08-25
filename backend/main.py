@@ -154,7 +154,7 @@ def get_detail_sheet_structure(sheet_name: str):
         elif c1 and not c0 and not unit and c1.isupper() and len(c1) > 5:
             is_header = True
             current_category = c1
-        elif ("Clearing" in c1 and "Grubbing" in c1) or ("Removal of Trees" in c1 and c0 == "2.2") or ("Roadway Excavation" in c1 and c0 == "3.1"):
+        elif ("Clearing" in c1 and "Grubbing" in c1) or ("Removal of Trees" in c1 and c0 == "2.2") or ("Roadway Excavation" in c1 and c0 == "3.1") or ("Rock Blasting" in c1 or "Blasting" in c1 or c0 == "3.4"):
             is_header = True
             current_category = c1 if c1 else c0
 
@@ -163,9 +163,10 @@ def get_detail_sheet_structure(sheet_name: str):
         if c0 in ["3.1.2", "3.1.3"] or (c0 and not unit and c1 in ["Edge Widening", "Shoulder Excavation"]):
             is_sub_item_header = True
 
-        # Determine if category needs LHS/RHS sub-headers (like Removal of Trees, Roadway Excavation, Rock Blasting 3.4, Drains, Retaining Walls)
+        # Determine if category needs LHS/RHS sub-headers (like Removal of Trees 2.2, Roadway Excavation 3.1, Rock Blasting 3.4, Drains, Retaining Walls)
         needs_lhs_rhs = False
-        if "Removal of Trees" in current_category or "Trees" in current_category or "Roadway Excavation" in current_category or "Excavation" in current_category or "Rock Blasting" in current_category or "Blasting" in current_category or "Chemical" in current_category or "Drain" in current_category or "Wall" in current_category or c0 in ["2.2", "3.1", "3.3", "3.4", "3.5", "3.6"]:
+        cat_upper = current_category.upper()
+        if any(k in cat_upper for k in ["TREES", "EXCAVATION", "BLASTING", "CHEMICAL", "DRAIN", "WALL", "SLIPS", "SLIDES"]) or c0 in ["2.2", "3.1", "3.3", "3.4", "3.5", "3.6", "6.1", "7.1"]:
             needs_lhs_rhs = True
 
         # Check if single value row (like Clearing & Grubbing Cumulative Area) vs LHS/RHS row
@@ -251,13 +252,11 @@ class ExportDetailSheetRequest(BaseModel):
     transport_distances: Optional[List[Dict[str, Any]]] = []
     items: List[ExportItem]
 
-@app.post("/api/detail-sheet/export")
-def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = req.sheet_name or "Detail -1"
-    
-    # Colors matching user image
+class ExportAllDetailSheetsRequest(BaseModel):
+    sheets: List[ExportDetailSheetRequest]
+
+def populate_detail_worksheet(ws, req: ExportDetailSheetRequest):
+    # Colors matching RDA master Excel format
     peach_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
     blue_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
     purple_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
@@ -619,11 +618,46 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
 
             curr_row += 1
 
+@app.post("/api/detail-sheet/export")
+def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = req.sheet_name or "Detail -1"
+    
+    populate_detail_worksheet(ws, req)
+
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     
     filename = f"RDA_Detail_Sheet_{req.sheet_name.replace(' ', '_')}.xlsx"
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.post("/api/detail-sheet/export-all")
+def export_all_detail_sheets_to_excel(req: ExportAllDetailSheetsRequest):
+    if not req.sheets:
+        raise HTTPException(status_code=400, detail="No detail sheet requests provided.")
+        
+    wb = openpyxl.Workbook()
+    # Remove default sheet after creating custom sheets
+    default_sheet = wb.active
+    
+    for idx, sheet_req in enumerate(req.sheets):
+        sheet_title = sheet_req.sheet_name or f"Detail -{idx+1}"
+        ws = wb.create_sheet(title=sheet_title)
+        populate_detail_worksheet(ws, sheet_req)
+        
+    wb.remove(default_sheet)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = "RDA_ALL_DETAIL_SHEETS_COMBINED.xlsx"
     return Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
