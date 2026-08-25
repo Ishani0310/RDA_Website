@@ -97,7 +97,6 @@ def get_detail_sheet_structure(sheet_name: str):
             return str(v).strip() if v is not None else ""
         return ""
 
-    # 12 RDA Metadata Fields matching user image specification
     metadata = {
         "sheet_name": target_sheet,
         "province": val(5, 2) or "Central",
@@ -116,21 +115,17 @@ def get_detail_sheet_structure(sheet_name: str):
     }
 
     transport_distances = [
-        {"material": "Fine Aggregate", "distance_km": float(val(14, 6)) if val(14, 6).replace('.', '', 1).isdigit() else 25.0, "unit": "km"},
-        {"material": "Coarse Aggregate", "distance_km": float(val(14, 9)) if val(14, 9).replace('.', '', 1).isdigit() else 25.0, "unit": "km"},
-        {"material": "Asphalt Concrete", "distance_km": float(val(14, 12)) if val(14, 12).replace('.', '', 1).isdigit() else 40.0, "unit": "km"},
-        {"material": "Ready Mix Concrete", "distance_km": float(val(15, 6)) if val(15, 6).replace('.', '', 1).isdigit() else 20.0, "unit": "km"},
-        {"material": "Bitumen Emulsion", "distance_km": float(val(15, 9)) if val(15, 9).replace('.', '', 1).isdigit() else 120.0, "unit": "km"},
-        {"material": "Soil / Borrow Material", "distance_km": float(val(15, 12)) if val(15, 12).replace('.', '', 1).isdigit() else 25.0, "unit": "km"}
-    ]
-
-    surfaces = [
-        {"type": "Gravel Section", "length_m": 850, "avg_width_m": 3.5, "proposed_width_m": 4.5, "area_sqm": 3825},
-        {"type": "Macadam / DBST / Tar Surface Section", "length_m": 2400, "avg_width_m": 4.0, "proposed_width_m": 4.5, "area_sqm": 10800},
-        {"type": "Concrete Surface Section", "length_m": 950, "avg_width_m": 4.5, "proposed_width_m": 4.5, "area_sqm": 4275}
+        {"material": "Fine Agg.", "distance_km": float(val(14, 6)) if val(14, 6).replace('.', '', 1).isdigit() else 25.0, "unit": "km"},
+        {"material": "Course Agg.", "distance_km": float(val(14, 9)) if val(14, 9).replace('.', '', 1).isdigit() else 25.0, "unit": "km"},
+        {"material": "Asphalt", "distance_km": float(val(14, 12)) if val(14, 12).replace('.', '', 1).isdigit() else 40.0, "unit": "km"},
+        {"material": "Ready Mix", "distance_km": float(val(15, 6)) if val(15, 6).replace('.', '', 1).isdigit() else 20.0, "unit": "km"},
+        {"material": "Emulsion", "distance_km": float(val(15, 9)) if val(15, 9).replace('.', '', 1).isdigit() else 120.0, "unit": "km"},
+        {"material": "Soil", "distance_km": float(val(15, 12)) if val(15, 12).replace('.', '', 1).isdigit() else 25.0, "unit": "km"}
     ]
 
     items = []
+    current_category = ""
+
     for idx in range(23, len(rows)):
         r = rows[idx]
         if not r:
@@ -152,14 +147,24 @@ def get_detail_sheet_structure(sheet_name: str):
                 break
                 
         is_header = False
-        if (c0 and not unit and len(c0) <= 8 and ("." in c0 or c0.isdigit())) or (c1 and not c0 and not unit and c1.isupper() and len(c1) > 5):
+        if (c0 and not unit and len(c0) <= 8 and ("." in c0 or c0.isdigit())) or (c1 and not c0 and not unit and c1.isupper() and len(c1) > 5) or ("Clearing" in c1 and "Grubbing" in c1) or ("Removal of Trees" in c1):
             is_header = True
+            current_category = c1
             
+        # Determine if single value row (like Clearing & Grubbing Cumulative Area) vs LHS/RHS row
+        is_single_value = True
+        if "Removal of Trees" in current_category or "Tree" in c1 or "Drain" in c1 or "LHS" in c1 or "RHS" in c1 or "Wall" in c1 or "Kerb" in c1:
+            is_single_value = False
+
+        if "Cumulative Area" in c1 or "Clearing" in current_category:
+            is_single_value = True
+
         items.append({
             "item_no": c0,
             "description": c1,
             "unit": unit,
             "is_header": is_header,
+            "is_single_value": is_single_value,
             "row_idx": idx + 1
         })
 
@@ -167,7 +172,6 @@ def get_detail_sheet_structure(sheet_name: str):
         "sheet_name": target_sheet,
         "metadata": metadata,
         "transport_distances": transport_distances,
-        "surfaces": surfaces,
         "total_sscm_items": len(items),
         "items": items
     }
@@ -196,6 +200,11 @@ class ExportItem(BaseModel):
     description: Optional[str] = ""
     unit: Optional[str] = ""
     is_header: bool = False
+    is_single_value: bool = True
+    val_single_gravel: Optional[float] = 0.0
+    val_single_asphalt: Optional[float] = 0.0
+    val_single_concrete: Optional[float] = 0.0
+    val_single_interlock: Optional[float] = 0.0
     gravel_lhs: Optional[float] = 0.0
     gravel_rhs: Optional[float] = 0.0
     asphalt_lhs: Optional[float] = 0.0
@@ -208,6 +217,7 @@ class ExportItem(BaseModel):
 class ExportDetailSheetRequest(BaseModel):
     sheet_name: str
     metadata: Optional[Dict[str, Any]] = {}
+    surface_dimensions: Optional[Dict[str, Any]] = {}
     transport_distances: Optional[List[Dict[str, Any]]] = []
     items: List[ExportItem]
 
@@ -217,20 +227,19 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     ws = wb.active
     ws.title = req.sheet_name or "Detail -1"
     
-    # Exact Color Palette matching user image
+    # Colors matching user image
     peach_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
     blue_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
     purple_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
     interlock_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
-    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    green_fill = PatternFill(start_color="A9D08E", end_color="A9D08E", fill_type="solid")
+    yellow_banner_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    green_bar_fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
+    green_fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
     light_green_input = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
     
-    title_font = Font(name="Calibri", size=14, bold=True, color="1E3A8A")
-    sec_font = Font(name="Calibri", size=11, bold=True, color="000000")
     bold_font = Font(name="Calibri", size=10, bold=True, color="000000")
     normal_font = Font(name="Calibri", size=10, color="000000")
-    yellow_font = Font(name="Calibri", size=11, bold=True, color="000000")
+    banner_font = Font(name="Calibri", size=11, bold=True, color="000000")
     
     thin_border = Border(
         left=Side(style='thin', color='000000'),
@@ -240,63 +249,132 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     )
     
     col_widths = {
-        'A': 8, 'B': 45, 'C': 12, 'D': 12, 'E': 8,
+        'A': 6, 'B': 45, 'C': 12, 'D': 12, 'E': 8,
         'F': 12, 'G': 12, 'H': 8, 'I': 12, 'J': 12, 'K': 8,
         'L': 12, 'M': 12, 'N': 8, 'O': 14
     }
     for col_letter, width in col_widths.items():
         ws.column_dimensions[col_letter].width = width
 
-    # Title Block
-    ws.merge_cells('A1:O1')
-    ws['A1'] = "ROAD DEVELOPMENT AUTHORITY - SRI LANKA"
-    ws['A1'].font = title_font
-    ws['A1'].alignment = Alignment(horizontal="center")
+    # Row 1: Existing Road Section Header
+    ws['B1'] = "Existing Road Section"
+    ws['B1'].font = bold_font
     
-    ws.merge_cells('A2:O2')
-    ws['A2'] = f"ROAD DATA & MEASUREMENT SHEET ({req.sheet_name})"
-    ws['A2'].font = sec_font
-    ws['A2'].alignment = Alignment(horizontal="center")
+    ws.merge_cells('C1:E1')
+    ws['C1'] = "Gravel Section"
+    ws['C1'].fill = peach_fill
+    ws['C1'].font = bold_font
+    ws['C1'].alignment = Alignment(horizontal="center")
+    
+    ws.merge_cells('F1:H1')
+    ws['F1'] = "Macadam, DBST, SBST, Tar Surface Section"
+    ws['F1'].fill = blue_fill
+    ws['F1'].font = bold_font
+    ws['F1'].alignment = Alignment(horizontal="center")
+    
+    ws.merge_cells('I1:K1')
+    ws['I1'] = "Concrete Surface Section"
+    ws['I1'].fill = purple_fill
+    ws['I1'].font = bold_font
+    ws['I1'].alignment = Alignment(horizontal="center")
+    
+    ws.merge_cells('L1:N1')
+    ws['L1'] = "Interlock Paved Section"
+    ws['L1'].fill = interlock_fill
+    ws['L1'].font = bold_font
+    ws['L1'].alignment = Alignment(horizontal="center")
 
-    # Section 1 Metadata (All 12 fields)
+    # Rows 11 - 13: Yellow Label Col B, Green Fill across Cols C to N
     m = req.metadata or {}
-    ws['A4'] = "Province:"
-    ws['B4'] = m.get("province", "Central")
-    ws['D4'] = "District:"
-    ws['E4'] = m.get("district", "Kandy")
+    
+    ws['B11'] = "Road Name"
+    ws['B11'].fill = yellow_banner_fill
+    ws['B11'].font = bold_font
+    ws.merge_cells('C11:N11')
+    ws['C11'] = m.get("road_name", "Kandy - Mahiyangana - Padiyathalawa Road Section")
+    ws['C11'].fill = green_bar_fill
+    ws['C11'].font = bold_font
 
-    ws['A5'] = "EE Division:"
-    ws['B5'] = m.get("ee_division", "Kandy EE")
-    ws['D5'] = "CE Division:"
-    ws['E5'] = m.get("ce_division", "Kandy CE")
+    ws['B12'] = "Road Class and Number"
+    ws['B12'].fill = yellow_banner_fill
+    ws['B12'].font = bold_font
+    ws.merge_cells('C12:N12')
+    ws['C12'] = m.get("road_class_and_number", "Class B (B-124)")
+    ws['C12'].fill = green_bar_fill
+    ws['C12'].font = bold_font
 
-    ws['A6'] = "Electorate/s:"
-    ws['B6'] = m.get("electorate", "Kandy Electorate")
-    ws['D6'] = "Contract Serial No:"
-    ws['E6'] = m.get("contract_no", "RDA/DC/DRP/SLOPE/CP/KDY/KDY/PACKAGE 17A")
+    ws['B13'] = "Road Improvement Type"
+    ws['B13'].fill = yellow_banner_fill
+    ws['B13'].font = bold_font
+    ws.merge_cells('C13:N13')
+    ws['C13'] = m.get("road_improvement_type", "Rehabilitation & Asphalt Concrete Surfacing")
+    ws['C13'].fill = green_bar_fill
+    ws['C13'].font = bold_font
 
-    ws['A7'] = "Project Name:"
-    ws['B7'] = m.get("project_name", "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT")
+    # Rows 14 - 16 Left Side: Road Length & Width Box
+    ws['B14'] = "Road Length"
+    ws['B14'].font = bold_font
+    ws['C14'] = "=C20+F20+I20+L20"
+    ws['C14'].font = bold_font
+    ws['C14'].border = thin_border
+    ws['E14'] = "km"
 
-    ws['A8'] = "Road Name:"
-    ws['B8'] = m.get("road_name", "Road Rehabilitation Section")
+    ws['B15'] = "Avg. Road Width (Existing)"
+    ws['B15'].font = bold_font
+    ws['C15'] = 3.8
+    ws['C15'].border = thin_border
+    ws['E15'] = "m"
 
-    ws['A9'] = "Road Class and Number:"
-    ws['B9'] = m.get("road_class_and_number", "Class B (B-124)")
+    ws['B16'] = "Road width (Proposed)"
+    ws['B16'].font = bold_font
+    ws['C16'] = 4.5
+    ws['C16'].border = thin_border
+    ws['E16'] = "m"
 
-    ws['A10'] = "Road Improvement Type:"
-    ws['B10'] = m.get("road_improvement_type", "Rehabilitation & Asphalt Concrete Surfacing")
+    # Rows 14 - 16 Right Side: Sample Transport Distances Block
+    ws.merge_cells('F14:N14')
+    ws['F14'] = "Sample Transport Distances - (NOTE - Material Distances to be Decided by the Estimator)"
+    ws['F14'].font = bold_font
+    ws['F14'].alignment = Alignment(horizontal="center")
+    ws['F14'].border = thin_border
 
-    ws['A11'] = "Road Length:"
-    ws['B11'] = m.get("road_length", "4.20 km")
+    ws['F15'] = "Fine Agg."
+    ws['G15'] = 25
+    ws['G15'].fill = green_bar_fill
+    ws['G15'].border = thin_border
+    ws['H15'] = "km"
 
-    ws['A12'] = "Avg. Road Width (Existing):"
-    ws['B12'] = m.get("avg_road_width_existing", "3.80 m")
+    ws['I15'] = "Course Agg."
+    ws['J15'] = 25
+    ws['J15'].fill = green_bar_fill
+    ws['J15'].border = thin_border
+    ws['K15'] = "km"
 
-    ws['A13'] = "Road width (Proposed):"
-    ws['B13'] = m.get("road_width_proposed", "4.50 m")
+    ws['L15'] = "Asphalt"
+    ws['M15'] = 40
+    ws['M15'].fill = green_bar_fill
+    ws['M15'].border = thin_border
+    ws['N15'] = "km"
 
-    # Row 18: Road Surface Classification Headers
+    ws['F16'] = "Ready Mix"
+    ws['G16'] = 20
+    ws['G16'].fill = green_bar_fill
+    ws['G16'].border = thin_border
+    ws['H16'] = "km"
+
+    ws['I16'] = "Emulsion"
+    ws['J16'] = 120
+    ws['J16'].fill = green_bar_fill
+    ws['J16'].border = thin_border
+    ws['K16'] = "km"
+
+    ws['L16'] = "Soil"
+    ws['M16'] = 25
+    ws['M16'].fill = green_bar_fill
+    ws['M16'].border = thin_border
+    ws['N16'] = "km"
+
+    # Row 18: Existing Road Section Header
     ws['B18'] = "Existing Road Section"
     ws['B18'].font = bold_font
     
@@ -307,7 +385,7 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     ws['C18'].alignment = Alignment(horizontal="center")
     
     ws.merge_cells('F18:H18')
-    ws['F18'] = "Macadam, DBST, SBST, Tar Surface Section"
+    ws['F18'] = "AC, Macadam, DBST, SBST, Tar Surface Section"
     ws['F18'].fill = blue_fill
     ws['F18'].font = bold_font
     ws['F18'].alignment = Alignment(horizontal="center")
@@ -324,47 +402,54 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     ws['L18'].font = bold_font
     ws['L18'].alignment = Alignment(horizontal="center")
 
-    ws['O18'] = "Total (m)"
+    ws['O18'] = "Total"
     ws['O18'].font = bold_font
     ws['O18'].alignment = Alignment(horizontal="center")
 
-    # Row 20: Length
+    # Surface Section Dimensions (Rows 20, 21, 22)
+    sd = req.surface_dimensions or {}
+
     ws['B20'] = "Length"
+    ws['C20'] = sd.get("gravel_len", 850)
     ws['E20'] = "m"
+    ws['F20'] = sd.get("asphalt_len", 2400)
     ws['H20'] = "m"
+    ws['I20'] = sd.get("concrete_len", 950)
     ws['K20'] = "m"
+    ws['L20'] = sd.get("interlock_len", 0)
     ws['N20'] = "m"
-    ws['O20'] = 0
+    ws['O20'] = "=C20+F20+I20+L20"
+    ws['O20'].font = bold_font
+    for c in ['C','D','E','F','G','H','I','J','K','L','M','N','O']:
+        ws[f'{c}20'].fill = green_bar_fill
 
-    # Row 21: Proposed Width (Green Fill)
     ws['B21'] = "Proposed Width"
-    for col_letter in ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']:
-        ws[f'{col_letter}21'].fill = green_fill
+    ws['C21'] = sd.get("gravel_prop_w", 4.5)
     ws['E21'] = "m"
+    ws['F21'] = sd.get("asphalt_prop_w", 4.5)
     ws['H21'] = "m"
+    ws['I21'] = sd.get("concrete_prop_w", 4.5)
     ws['K21'] = "m"
+    ws['L21'] = sd.get("interlock_prop_w", 4.5)
     ws['N21'] = "m"
+    ws['O21'] = 4.5
+    ws['O21'].font = bold_font
+    for c in ['C','D','E','F','G','H','I','J','K','L','M','N','O']:
+        ws[f'{c}21'].fill = green_fill
 
-    # Row 22: Avg. Existing Width (Green Fill)
-    ws['B22'] = "Avg. Existing Width"
-    for col_letter in ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']:
-        ws[f'{col_letter}22'].fill = green_fill
+    ws['B22'] = "Avg.Existing Width"
+    ws['C22'] = sd.get("gravel_exist_w", 3.5)
     ws['E22'] = "m"
+    ws['F22'] = sd.get("asphalt_exist_w", 4.0)
     ws['H22'] = "m"
+    ws['I22'] = sd.get("concrete_exist_w", 4.5)
     ws['K22'] = "m"
+    ws['L22'] = sd.get("interlock_exist_w", 0.0)
     ws['N22'] = "m"
-
-    # Row 28: LHS / RHS Sub-headers
-    sub_headers = {
-        'C28': 'LHS', 'D28': 'RHS',
-        'F28': 'LHS', 'G28': 'RHS',
-        'I28': 'LHS', 'J28': 'RHS',
-        'L28': 'LHS', 'M28': 'RHS'
-    }
-    for cell_ref, text in sub_headers.items():
-        ws[cell_ref] = text
-        ws[cell_ref].font = bold_font
-        ws[cell_ref].alignment = Alignment(horizontal="center")
+    ws['O22'] = 3.8
+    ws['O22'].font = bold_font
+    for c in ['C','D','E','F','G','H','I','J','K','L','M','N','O']:
+        ws[f'{c}22'].fill = green_fill
 
     # Populate Data Items Starting Row 24
     curr_row = 24
@@ -375,12 +460,13 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
                 
             ws.merge_cells(start_row=curr_row, start_column=1, end_row=curr_row, end_column=15)
             banner_cell = ws.cell(row=curr_row, column=1, value=f"{it.item_no}  {it.description}")
-            banner_cell.fill = yellow_fill
-            banner_cell.font = yellow_font
+            banner_cell.fill = yellow_banner_fill
+            banner_cell.font = banner_font
             banner_cell.alignment = Alignment(horizontal="left", vertical="center")
             curr_row += 1
             
-            if it.item_no == "2.2":
+            # Sub-headers LHS/RHS ONLY for categories like Removal of Trees (Row 28 in screenshot)
+            if "Removal of Trees" in it.description or "Trees" in it.description or "2.2" in it.item_no:
                 ws.cell(row=curr_row, column=3, value="LHS").alignment = Alignment(horizontal="center")
                 ws.cell(row=curr_row, column=4, value="RHS").alignment = Alignment(horizontal="center")
                 ws.cell(row=curr_row, column=6, value="LHS").alignment = Alignment(horizontal="center")
@@ -394,57 +480,112 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             ws.cell(row=curr_row, column=1, value=it.item_no).border = thin_border
             ws.cell(row=curr_row, column=2, value=it.description).border = thin_border
             
-            c_cell = ws.cell(row=curr_row, column=3, value=it.gravel_lhs or 0)
-            c_cell.fill = light_green_input
-            c_cell.border = thin_border
-            
-            d_cell = ws.cell(row=curr_row, column=4, value=it.gravel_rhs or 0)
-            d_cell.fill = light_green_input
-            d_cell.border = thin_border
-            
-            e_unit = ws.cell(row=curr_row, column=5, value=it.unit)
-            e_unit.fill = peach_fill
-            e_unit.border = thin_border
-            
-            f_cell = ws.cell(row=curr_row, column=6, value=it.asphalt_lhs or 0)
-            f_cell.fill = light_green_input
-            f_cell.border = thin_border
-            
-            g_cell = ws.cell(row=curr_row, column=7, value=it.asphalt_rhs or 0)
-            g_cell.fill = light_green_input
-            g_cell.border = thin_border
-            
-            h_unit = ws.cell(row=curr_row, column=8, value=it.unit)
-            h_unit.fill = blue_fill
-            h_unit.border = thin_border
-            
-            i_cell = ws.cell(row=curr_row, column=9, value=it.concrete_lhs or 0)
-            i_cell.fill = light_green_input
-            i_cell.border = thin_border
-            
-            j_cell = ws.cell(row=curr_row, column=10, value=it.concrete_rhs or 0)
-            j_cell.fill = light_green_input
-            j_cell.border = thin_border
-            
-            k_unit = ws.cell(row=curr_row, column=11, value=it.unit)
-            k_unit.fill = purple_fill
-            k_unit.border = thin_border
-            
-            l_cell = ws.cell(row=curr_row, column=12, value=it.interlock_lhs or 0)
-            l_cell.fill = light_green_input
-            l_cell.border = thin_border
-            
-            m_cell = ws.cell(row=curr_row, column=13, value=it.interlock_rhs or 0)
-            m_cell.fill = light_green_input
-            m_cell.border = thin_border
-            
-            n_unit = ws.cell(row=curr_row, column=14, value=it.unit)
-            n_unit.fill = interlock_fill
-            n_unit.border = thin_border
-            
-            o_tot = ws.cell(row=curr_row, column=15, value=f"=C{curr_row}+D{curr_row}+F{curr_row}+G{curr_row}+I{curr_row}+J{curr_row}+L{curr_row}+M{curr_row}")
-            o_tot.font = Font(bold=True)
-            o_tot.border = thin_border
+            # Check if this row is a Single Value item (like Row 25 Clearing & Grubbing Cumulative Area)
+            if it.is_single_value or "Cumulative Area" in it.description or "Clearing" in it.description:
+                # Gravel Section Single Input (Merged C & D)
+                ws.merge_cells(start_row=curr_row, start_column=3, end_row=curr_row, end_column=4)
+                c_cell = ws.cell(row=curr_row, column=3, value=it.val_single_gravel or it.gravel_lhs or 0)
+                c_cell.fill = light_green_input
+                c_cell.alignment = Alignment(horizontal="center")
+                c_cell.border = thin_border
+                ws.cell(row=curr_row, column=4).border = thin_border
+                
+                e_unit = ws.cell(row=curr_row, column=5, value=it.unit)
+                e_unit.fill = peach_fill
+                e_unit.border = thin_border
+                
+                # Asphalt Section Single Input (Merged F & G)
+                ws.merge_cells(start_row=curr_row, start_column=6, end_row=curr_row, end_column=7)
+                f_cell = ws.cell(row=curr_row, column=6, value=it.val_single_asphalt or it.asphalt_lhs or 0)
+                f_cell.fill = light_green_input
+                f_cell.alignment = Alignment(horizontal="center")
+                f_cell.border = thin_border
+                ws.cell(row=curr_row, column=7).border = thin_border
+                
+                h_unit = ws.cell(row=curr_row, column=8, value=it.unit)
+                h_unit.fill = blue_fill
+                h_unit.border = thin_border
+                
+                # Concrete Section Single Input (Merged I & J)
+                ws.merge_cells(start_row=curr_row, start_column=9, end_row=curr_row, end_column=10)
+                i_cell = ws.cell(row=curr_row, column=9, value=it.val_single_concrete or it.concrete_lhs or 0)
+                i_cell.fill = light_green_input
+                i_cell.alignment = Alignment(horizontal="center")
+                i_cell.border = thin_border
+                ws.cell(row=curr_row, column=10).border = thin_border
+                
+                k_unit = ws.cell(row=curr_row, column=11, value=it.unit)
+                k_unit.fill = purple_fill
+                k_unit.border = thin_border
+                
+                # Interlock Section Single Input (Merged L & M)
+                ws.merge_cells(start_row=curr_row, start_column=12, end_row=curr_row, end_column=13)
+                l_cell = ws.cell(row=curr_row, column=12, value=it.val_single_interlock or it.interlock_lhs or 0)
+                l_cell.fill = light_green_input
+                l_cell.alignment = Alignment(horizontal="center")
+                l_cell.border = thin_border
+                ws.cell(row=curr_row, column=13).border = thin_border
+                
+                n_unit = ws.cell(row=curr_row, column=14, value=it.unit)
+                n_unit.fill = interlock_fill
+                n_unit.border = thin_border
+                
+                o_tot = ws.cell(row=curr_row, column=15, value=f"=C{curr_row}+F{curr_row}+I{curr_row}+L{curr_row}")
+                o_tot.font = Font(bold=True)
+                o_tot.border = thin_border
+            else:
+                # LHS / RHS Dual Input item (like Removal of Trees, Drains, etc.)
+                c_cell = ws.cell(row=curr_row, column=3, value=it.gravel_lhs or 0)
+                c_cell.fill = light_green_input
+                c_cell.border = thin_border
+                
+                d_cell = ws.cell(row=curr_row, column=4, value=it.gravel_rhs or 0)
+                d_cell.fill = light_green_input
+                d_cell.border = thin_border
+                
+                e_unit = ws.cell(row=curr_row, column=5, value=it.unit)
+                e_unit.fill = peach_fill
+                e_unit.border = thin_border
+                
+                f_cell = ws.cell(row=curr_row, column=6, value=it.asphalt_lhs or 0)
+                f_cell.fill = light_green_input
+                f_cell.border = thin_border
+                
+                g_cell = ws.cell(row=curr_row, column=7, value=it.asphalt_rhs or 0)
+                g_cell.fill = light_green_input
+                g_cell.border = thin_border
+                
+                h_unit = ws.cell(row=curr_row, column=8, value=it.unit)
+                h_unit.fill = blue_fill
+                h_unit.border = thin_border
+                
+                i_cell = ws.cell(row=curr_row, column=9, value=it.concrete_lhs or 0)
+                i_cell.fill = light_green_input
+                i_cell.border = thin_border
+                
+                j_cell = ws.cell(row=curr_row, column=10, value=it.concrete_rhs or 0)
+                j_cell.fill = light_green_input
+                j_cell.border = thin_border
+                
+                k_unit = ws.cell(row=curr_row, column=11, value=it.unit)
+                k_unit.fill = purple_fill
+                k_unit.border = thin_border
+                
+                l_cell = ws.cell(row=curr_row, column=12, value=it.interlock_lhs or 0)
+                l_cell.fill = light_green_input
+                l_cell.border = thin_border
+                
+                m_cell = ws.cell(row=curr_row, column=13, value=it.interlock_rhs or 0)
+                m_cell.fill = light_green_input
+                m_cell.border = thin_border
+                
+                n_unit = ws.cell(row=curr_row, column=14, value=it.unit)
+                n_unit.fill = interlock_fill
+                n_unit.border = thin_border
+                
+                o_tot = ws.cell(row=curr_row, column=15, value=f"=C{curr_row}+D{curr_row}+F{curr_row}+G{curr_row}+I{curr_row}+J{curr_row}+L{curr_row}+M{curr_row}")
+                o_tot.font = Font(bold=True)
+                o_tot.border = thin_border
 
             curr_row += 1
 
