@@ -14,8 +14,78 @@ import {
   Eye,
   SlidersHorizontal,
   Download,
-  CheckCircle2
+  CheckCircle2,
+  Info,
+  PhoneCall,
+  BookOpen,
+  HelpCircle,
+  Sparkles,
+  Search,
+  MapPin
 } from 'lucide-react';
+
+const SECTION_DESCRIPTIONS = {
+  "2": {
+    title: "Section 2: Site Clearance & Preparation",
+    code: "SSCM 200",
+    desc: "Clearing & grubbing of top soil (150mm), felling & uprooting trees by girth size, removal of stumps, branches, and dismantling of existing structures (masonry, culverts, fencing, floor area).",
+    specs: "Measured in Sq.m (area clearing), Nos (tree count), Cu.m (structure dismantling), or L.m (fencing removal)."
+  },
+  "3": {
+    title: "Section 3: Earthworks & Subgrade Construction",
+    code: "SSCM 300",
+    desc: "Roadway excavation in unclassified soil / rock, base failure repairs, subgrade preparation (100% MDD compaction), embankment construction using approved borrow material (Type I & II), and geofabric layer placement.",
+    specs: "Measured in Cu.m (excavation & embankment volumes) or Sq.m (trimming & leveling)."
+  },
+  "4": {
+    title: "Section 4: Pavement Sub-Base & Base Course",
+    code: "SSCM 400",
+    desc: "Scarification of existing base, aggregate sub-base layer (CBR >= 30%), crushing existing concrete, dense graded Aggregate Base Course (ABC 37.5mm), and shoulder soil compaction.",
+    specs: "Measured in Cu.m (compacted volume in position) or Sq.m (scarification)."
+  },
+  "5": {
+    title: "Section 5: Bituminous & Concrete Pavement Surfacing",
+    code: "SSCM 500",
+    desc: "Tack coat (CRS-1), Prime coat (CSS-1), Asphalt wearing course (40mm using Paver or Manual laying), Asphalt regulating/binder course, Grade 30 concrete surfacing, edge widening, and interlocking cement block paving.",
+    specs: "Measured in Sq.m (surface area), Litres/Sq.m (bitumen rate), or Cu.m (concrete volume)."
+  },
+  "6": {
+    title: "Section 6: Drainage Construction & Culvert Cover Slabs",
+    code: "SSCM 600",
+    desc: "Earth drains, leadaway channels, Precast Concrete L-Drains (AD-1, AD-2), Dish Drains (DD-2, DD-3), U-Drains (UD-1 to UD-4), precast RCC Cover Slabs (Lite & Heavy Duty 100mm-150mm), and subsurface PVC drain pipes.",
+    specs: "Measured in L.m (drain run length) or Nos (cover slab units)."
+  },
+  "7": {
+    title: "Section 7: Retaining Wall Construction",
+    code: "SSCM 700",
+    desc: "Masonry Retaining Walls (MCR-1 to MCR-10, height 1.0m to 6.2m), Reinforced Concrete Retaining Walls (RC-1 to RC-9, height 1.5m to 7.5m), and Concrete Block Gravity (CBG/RBG) walls with pocket filling.",
+    specs: "Measured in L.m (wall length at specified height category)."
+  },
+  "8": {
+    title: "Section 8: Culverts & Structural Cross Drainage",
+    code: "SSCM 800",
+    desc: "Single & Double Row Pipe Culverts with/without concrete encasement (Type 1-6), RCC Box Culverts, Slab Culverts, and pocket mass concrete filling.",
+    specs: "Measured in L.m (pipe length) or Cu.m (box/slab concrete)."
+  },
+  "9": {
+    title: "Section 9: Road Marking, Signs & Footwalk Construction",
+    code: "SSCM 900",
+    desc: "Thermoplastic reflectorized line marking (3mm), single/double pole road signs, chevron warning signs, footwalk kerbs, block paving, gravelly base layer, grass sodding (turfing), and access pipe culverts.",
+    specs: "Measured in L.m (line marking/kerbs), Nos (signs), or Sq.m (turfing & paving)."
+  },
+  "10": {
+    title: "Section 10 & 11: Miscellaneous & Safety Works",
+    code: "SSCM 1000/1100",
+    desc: "Removal of interlock pavement, galvanized W-beam guard rails, pedestrian safety guard fences, and slope protection barriers.",
+    specs: "Measured in L.m (guard rail run) or Sq.m (interlock removal)."
+  },
+  "1": {
+    title: "Section 1: Preliminary & General (P&G)",
+    code: "SSCM 100",
+    desc: "Mobilization/demobilization, maintenance of existing roads, center-line survey & cross-sections, contractor's insurance, Engineer's office & site vehicles (4WD cabs, bikes, SUVs), and provisional sums.",
+    specs: "Lump Sum (LS) or Monthly Rate items."
+  }
+};
 
 export default function DetailSheetView() {
   const [detailSheets, setDetailSheets] = useState(['Detail -1']);
@@ -26,6 +96,23 @@ export default function DetailSheetView() {
   const [exporting, setExporting] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [selectedCategoryInfo, setSelectedCategoryInfo] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Editable Section 1 Metadata Form State matching user image
+  const [metaFields, setMetaFields] = useState({
+    province: 'Central',
+    ee_division: 'Kandy EE',
+    ce_division: 'Kandy CE',
+    electorate: 'Kandy Electorate',
+    project_name: 'INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT',
+    road_name: 'Kandy - Mahiyangana - Padiyathalawa Road Section',
+    road_class_and_number: 'Class B (B-124)',
+    road_improvement_type: 'Rehabilitation & Asphalt Concrete Surfacing',
+    road_length: '4.20 km',
+    avg_road_width_existing: '3.80 m',
+    road_width_proposed: '4.50 m'
+  });
 
   // New Detail Sheet Form State
   const [newSheetName, setNewSheetName] = useState('Detail -2');
@@ -36,7 +123,7 @@ export default function DetailSheetView() {
   // Interactive LHS/RHS Measurement Input State
   const [itemMeasurements, setItemMeasurements] = useState({});
 
-  // Optional Surface Section Toggles (User can choose which surface sections to show for easy value entry)
+  // Optional Surface Section Toggles
   const [visibleSections, setVisibleSections] = useState({
     gravel: true,
     asphalt: true,
@@ -57,9 +144,16 @@ export default function DetailSheetView() {
   const fetchDetailSheet = async (sheetName) => {
     setLoading(true);
     try {
-      const res = await axios.get(`/api/detail-sheet/${sheetName}`);
+      const res = await axios.get(`/api/detail-sheet/${encodeURIComponent(sheetName)}`);
       setSheetData(res.data);
       
+      if (res.data.metadata) {
+        setMetaFields(prev => ({
+          ...prev,
+          ...res.data.metadata
+        }));
+      }
+
       const initialMap = {};
       (res.data.items || []).forEach(it => {
         if (!it.is_header) {
@@ -77,6 +171,13 @@ export default function DetailSheetView() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMetaChange = (field, value) => {
+    setMetaFields(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   const handleInputChange = (itemKey, field, value) => {
@@ -139,7 +240,6 @@ export default function DetailSheetView() {
     }
   };
 
-  // SUBMIT & EXPORT TO EXCEL FUNCTION
   const handleExportToExcel = async () => {
     setExporting(true);
     setExportSuccess(false);
@@ -173,14 +273,13 @@ export default function DetailSheetView() {
 
       const response = await axios.post('/api/detail-sheet/export', {
         sheet_name: selectedSheet,
-        metadata: sheetData?.metadata || {},
+        metadata: metaFields,
         transport_distances: sheetData?.transport_distances || [],
         items: itemsPayload
       }, {
         responseType: 'blob'
       });
 
-      // Create download link for generated Excel sheet
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -208,10 +307,18 @@ export default function DetailSheetView() {
     );
   }
 
-  const meta = sheetData?.metadata || {};
   const distances = sheetData?.transport_distances || [];
-  const surfaces = sheetData?.surfaces || [];
   const items = sheetData?.items || [];
+
+  const filteredItems = items.filter(it => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (it.item_no && it.item_no.toLowerCase().includes(q)) ||
+      (it.description && it.description.toLowerCase().includes(q)) ||
+      (it.unit && it.unit.toLowerCase().includes(q))
+    );
+  });
 
   const activeColCount = 3 + 
     (visibleSections.gravel ? 2 : 0) + 
@@ -230,12 +337,11 @@ export default function DetailSheetView() {
               <h2 className="text-xl font-bold text-white">RDA Detail Sheets (Road Data & Quantity Builder)</h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Comprehensive Road Measurement Data Sheet with Category Headers & Excel Export Engine
+              Comprehensive Road Measurement Data Sheet with 11 Standard Project Metadata Fields & Excel Export
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* SUBMIT & EXPORT TO EXCEL BUTTON */}
             <button 
               onClick={handleExportToExcel}
               disabled={exporting}
@@ -295,42 +401,55 @@ export default function DetailSheetView() {
         </div>
       </div>
 
-      {/* SECTION 1: GENERAL ROAD PROJECT DATA SHEET METADATA HEADER */}
+      {/* TOP HEADER CONTACT & INFORMATION CARD */}
+      <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-amber-950/40 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
+            <PhoneCall className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="font-bold text-slate-200 text-sm">Road Development Authority - Data Sheet Technical Contact</div>
+            <div className="text-slate-400 text-[11px] flex items-center gap-4 mt-0.5">
+              <span><strong>Info Hotline:</strong> 071-2869499</span>
+              <span><strong>Executive Office:</strong> 077-2929728</span>
+              <span><strong>Total Loaded SSCM Descriptions:</strong> <strong className="text-amber-400">{items.length} items</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 bg-slate-950/80 px-3 py-2 rounded-lg border border-slate-800">
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          <span className="text-[11px] text-slate-300">
+            Loaded <strong>{items.length} Pay Item Descriptions</strong> from Excel Engine
+          </span>
+        </div>
+      </div>
+
+      {/* SECTION 1: GENERAL ROAD PROJECT DATA SHEET METADATA HEADER (EXACT MATCHING USER IMAGE) */}
       <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
             <Building2 className="w-4 h-4" />
-            <span>Section 1: General Road Project Data Sheet ({selectedSheet})</span>
+            <span>Section 1: General Road Project Details ({selectedSheet})</span>
           </div>
           <span className="px-2.5 py-0.5 rounded text-[11px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30">
-            DATA SHEET TEMPLATE REV0
+            11 PROJECT METADATA FIELDS
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 text-xs">
+        {/* 11 EXACT METADATA FIELDS FORM TABLE MATCHING USER IMAGE */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+          {/* 1. Province */}
           <div>
-            <label className="block text-slate-400 text-[11px] mb-1 font-semibold">Project Title</label>
-            <input 
-              type="text" 
-              readOnly 
-              value={meta.project_title} 
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white font-medium focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-slate-400 text-[11px] mb-1 font-semibold">Contract Serial No.</label>
-            <input 
-              type="text" 
-              readOnly 
-              value={meta.contract_no} 
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-amber-400 font-mono font-medium focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-slate-400 text-[11px] mb-1 font-semibold">Province</label>
-            <select className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-amber-500">
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-amber-400" />
+              <span>1. Province</span>
+            </label>
+            <select 
+              value={metaFields.province} 
+              onChange={(e) => handleMetaChange('province', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500 focus:outline-none"
+            >
               <option value="Central">Central</option>
               <option value="Western">Western</option>
               <option value="Southern">Southern</option>
@@ -343,38 +462,114 @@ export default function DetailSheetView() {
             </select>
           </div>
 
+          {/* 2. EE Division */}
           <div>
-            <label className="block text-slate-400 text-[11px] mb-1 font-semibold">District</label>
-            <select className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-amber-500">
-              <option value="Kandy">Kandy</option>
-              <option value="Matale">Matale</option>
-              <option value="Nuwara Eliya">Nuwara Eliya</option>
-              <option value="Colombo">Colombo</option>
-              <option value="Gampaha">Gampaha</option>
-              <option value="Kalutara">Kalutara</option>
-              <option value="Galle">Galle</option>
-              <option value="Matara">Matara</option>
-            </select>
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">2. EE Division</label>
+            <input 
+              type="text" 
+              value={metaFields.ee_division} 
+              onChange={(e) => handleMetaChange('ee_division', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500"
+            />
           </div>
 
+          {/* 3. CE Division */}
           <div>
-            <label className="block text-slate-400 text-[11px] mb-1 font-semibold">EE Division</label>
-            <input type="text" defaultValue={meta.ee_division} className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200" />
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">3. CE Division</label>
+            <input 
+              type="text" 
+              value={metaFields.ce_division} 
+              onChange={(e) => handleMetaChange('ce_division', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500"
+            />
           </div>
 
+          {/* 4. Electorate/s */}
           <div>
-            <label className="block text-slate-400 text-[11px] mb-1 font-semibold">CE Division</label>
-            <input type="text" defaultValue={meta.ce_division} className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200" />
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">4. Electorate/s</label>
+            <input 
+              type="text" 
+              value={metaFields.electorate} 
+              onChange={(e) => handleMetaChange('electorate', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500"
+            />
           </div>
 
-          <div>
-            <label className="block text-slate-400 text-[11px] mb-1 font-semibold">Road Length (km)</label>
-            <input type="text" defaultValue={meta.road_length_km} className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 font-mono" />
+          {/* 5. Project Name */}
+          <div className="md:col-span-2">
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">5. Project Name</label>
+            <input 
+              type="text" 
+              value={metaFields.project_name} 
+              onChange={(e) => handleMetaChange('project_name', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-amber-400 font-medium focus:border-amber-500"
+            />
           </div>
 
+          {/* 6. Road Name */}
+          <div className="md:col-span-2 lg:col-span-3">
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">6. Road Name</label>
+            <input 
+              type="text" 
+              value={metaFields.road_name} 
+              onChange={(e) => handleMetaChange('road_name', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-medium focus:border-amber-500"
+            />
+          </div>
+
+          {/* 7. Road Class and Number */}
           <div>
-            <label className="block text-slate-400 text-[11px] mb-1 font-semibold">Proposed Road Width (m)</label>
-            <input type="text" defaultValue={meta.proposed_width_m} className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 font-mono" />
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">7. Road Class and Number</label>
+            <input 
+              type="text" 
+              value={metaFields.road_class_and_number} 
+              onChange={(e) => handleMetaChange('road_class_and_number', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-mono font-medium focus:border-amber-500"
+            />
+          </div>
+
+          {/* 8. Road Improvement Type */}
+          <div className="md:col-span-2">
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">8. Road Improvement Type</label>
+            <input 
+              type="text" 
+              value={metaFields.road_improvement_type} 
+              onChange={(e) => handleMetaChange('road_improvement_type', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 font-medium focus:border-amber-500"
+            />
+          </div>
+
+          {/* 9. Road Length */}
+          <div>
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">9. Road Length</label>
+            <input 
+              type="text" 
+              value={metaFields.road_length} 
+              onChange={(e) => handleMetaChange('road_length', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-amber-400 font-mono font-bold focus:border-amber-500"
+            />
+          </div>
+
+          {/* 10. Avg. Road Width (Existing) */}
+          <div>
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">10. Avg. Road Width (Existing)</label>
+            <input 
+              type="text" 
+              value={metaFields.avg_road_width_existing} 
+              onChange={(e) => handleMetaChange('avg_road_width_existing', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-emerald-400 font-mono font-bold focus:border-amber-500"
+            />
+          </div>
+
+          {/* 11. Road width (Proposed) */}
+          <div>
+            <label className="block text-slate-400 text-[11px] mb-1 font-bold">11. Road width (Proposed)</label>
+            <input 
+              type="text" 
+              value={metaFields.road_width_proposed} 
+              onChange={(e) => handleMetaChange('road_width_proposed', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-amber-400 font-mono font-bold focus:border-amber-500"
+            />
           </div>
         </div>
       </div>
@@ -383,7 +578,7 @@ export default function DetailSheetView() {
       <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
         <div className="flex items-center gap-2 text-blue-400 font-bold text-sm border-b border-slate-800 pb-3">
           <Truck className="w-4 h-4" />
-          <span>Section 2: Material Transport Distances (Lead Distances for Estimator)</span>
+          <span>Section 2: Material Transport Lead Distances (Haulage Estimator Table)</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -391,7 +586,7 @@ export default function DetailSheetView() {
             <div key={i} className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
               <div>
                 <div className="font-bold text-slate-200">{dist.material}</div>
-                <div className="text-[11px] text-slate-400">Haulage lead distance</div>
+                <div className="text-[11px] text-slate-400">Transport haulage distance</div>
               </div>
               <div className="flex items-center gap-1.5">
                 <input 
@@ -406,20 +601,71 @@ export default function DetailSheetView() {
         </div>
       </div>
 
-      {/* SECTION 3: OPTIONAL SURFACE SECTIONS TOGGLE & ENTRY MATRIX */}
+      {/* SECTION SPECIFICATIONS & DESCRIPTIONS CARD BLOCK */}
+      <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+            <BookOpen className="w-4 h-4" />
+            <span>RDA Engineering Section Standard Specifications (SSCM Reference)</span>
+          </div>
+          <span className="text-xs text-slate-400">Click any section card to inspect technical specs</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {Object.entries(SECTION_DESCRIPTIONS).map(([secKey, sInfo]) => (
+            <div 
+              key={secKey} 
+              onClick={() => setSelectedCategoryInfo(sInfo)}
+              className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                selectedCategoryInfo?.title === sInfo.title 
+                  ? 'bg-amber-500/10 border-amber-500/50 shadow-md ring-1 ring-amber-500/30'
+                  : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-bold text-slate-200 text-xs">{sInfo.title}</span>
+                <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 rounded">
+                  {sInfo.code}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                {sInfo.desc}
+              </p>
+              <div className="mt-2 text-[10px] text-amber-400 font-medium flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                <span>{sInfo.specs}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* SECTION 3: OPTIONAL SURFACE SECTIONS TOGGLE, DESCRIPTION SEARCH & ENTRY MATRIX */}
       <div className="glass-card rounded-2xl p-6 border border-slate-800 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
           <div>
             <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
               <SlidersHorizontal className="w-4 h-4" />
-              <span>Section 3: SSCM Measurement Matrix (Selectable Surface Sections & Excel Export Engine)</span>
+              <span>Section 3: SSCM Measurement Matrix ({filteredItems.length} Descriptions Loaded)</span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Enter values below, then click <span className="text-emerald-400 font-bold">"Submit & Export to Excel"</span> to download your completed Excel sheet
+              Showing descriptions of work across 4 road surface types. Enter values and click <span className="text-emerald-400 font-bold">"Submit & Export to Excel"</span>
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* SEARCH DESCRIPTION INPUT */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input 
+                type="text" 
+                placeholder="Search pay item description..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 w-64"
+              />
+            </div>
+
             <button
               onClick={showAllSections}
               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 border border-slate-700 cursor-pointer"
@@ -496,7 +742,7 @@ export default function DetailSheetView() {
             <thead className="bg-slate-900 text-slate-200 font-bold uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
                 <th colSpan={3} className="py-3 px-3 border-r border-slate-800 bg-slate-950 text-amber-400 font-extrabold text-xs">
-                  SSCM Item & Description
+                  SSCM Item & Full Description of Work
                 </th>
                 
                 {visibleSections.gravel && (
@@ -529,9 +775,9 @@ export default function DetailSheetView() {
               </tr>
 
               <tr className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-[9px]">
-                <th className="py-2 px-2 w-12 border-r border-slate-800">Item</th>
+                <th className="py-2 px-2 w-16 border-r border-slate-800">Item</th>
                 <th className="py-2 px-3 border-r border-slate-800">Description of Work</th>
-                <th className="py-2 px-2 text-center border-r border-slate-800">Unit</th>
+                <th className="py-2 px-2 text-center border-r border-slate-800 w-16">Unit</th>
 
                 {visibleSections.gravel && (
                   <>
@@ -566,13 +812,22 @@ export default function DetailSheetView() {
             </thead>
 
             <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
-              {items.map((it, idx) => {
+              {filteredItems.map((it, idx) => {
                 if (it.is_header) {
+                  const secCode = it.item_no ? it.item_no.split('.')[0] : "2";
+                  const sInfo = SECTION_DESCRIPTIONS[secCode];
                   return (
                     <tr key={idx} className="bg-yellow-400 text-slate-950 font-black border-y-2 border-yellow-500 shadow-sm">
-                      <td className="py-2 px-3 font-mono font-black text-xs border-r border-yellow-500">{it.item_no}</td>
-                      <td colSpan={activeColCount - 1} className="py-2 px-3 text-xs uppercase tracking-wider font-extrabold text-slate-950">
-                        {it.description}
+                      <td className="py-2.5 px-3 font-mono font-black text-xs border-r border-yellow-500">{it.item_no || 'SEC'}</td>
+                      <td colSpan={activeColCount - 1} className="py-2.5 px-3 text-xs uppercase tracking-wider font-extrabold text-slate-950">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-1">
+                          <span>{it.description}</span>
+                          {sInfo && (
+                            <span className="text-[10px] normal-case font-normal text-slate-900 bg-yellow-300/80 px-2 py-0.5 rounded border border-yellow-600/40">
+                              {sInfo.code}: {sInfo.specs}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -595,9 +850,19 @@ export default function DetailSheetView() {
 
                 return (
                   <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-2 px-2 font-bold text-amber-400 border-r border-slate-800">{it.item_no || '-'}</td>
-                    <td className="py-2 px-3 font-medium text-slate-100 border-r border-slate-800">{it.description}</td>
-                    <td className="py-2 px-2 text-center text-slate-400 border-r border-slate-800 font-semibold">{it.unit || '-'}</td>
+                    <td className="py-2 px-2 font-bold text-amber-400 border-r border-slate-800 font-mono text-[11px]">
+                      {it.item_no || '-'}
+                    </td>
+                    <td className="py-2 px-3 font-medium text-slate-100 border-r border-slate-800 leading-relaxed text-xs">
+                      {it.description || 'General Pay Item Description'}
+                    </td>
+                    <td className="py-2 px-2 text-center text-slate-400 border-r border-slate-800 font-semibold text-[10px]">
+                      {it.unit ? (
+                        <span className="px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800 text-amber-300/90 font-mono">
+                          {it.unit}
+                        </span>
+                      ) : '-'}
+                    </td>
 
                     {/* Gravel Inputs */}
                     {visibleSections.gravel && (

@@ -1,5 +1,6 @@
 import os
 import io
+import urllib.parse
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -71,11 +72,23 @@ def get_workbook_info():
 
 @app.get("/api/detail-sheet/{sheet_name}")
 def get_detail_sheet_structure(sheet_name: str):
+    clean_name = urllib.parse.unquote(sheet_name).strip()
     wb = get_workbook(data_only=True, read_only=True)
-    if sheet_name not in wb.sheetnames:
-        raise HTTPException(status_code=404, detail=f"Detail sheet '{sheet_name}' not found.")
     
-    sheet = wb[sheet_name]
+    target_sheet = None
+    for s in wb.sheetnames:
+        if s.strip().lower() == clean_name.lower():
+            target_sheet = s
+            break
+            
+    if not target_sheet:
+        detail_sheets = [s for s in wb.sheetnames if s.startswith('Detail ')]
+        if detail_sheets:
+            target_sheet = detail_sheets[0]
+        else:
+            raise HTTPException(status_code=404, detail=f"Detail sheet '{clean_name}' not found.")
+
+    sheet = wb[target_sheet]
     rows = list(sheet.iter_rows(values_only=True))
     
     def val(r, c):
@@ -84,19 +97,22 @@ def get_detail_sheet_structure(sheet_name: str):
             return str(v).strip() if v is not None else ""
         return ""
 
+    # 12 RDA Metadata Fields matching user image specification
     metadata = {
-        "sheet_name": sheet_name,
-        "project_title": "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT",
-        "contract_no": val(5, 11) or "RDA/DC/DRP/SLOPE/CP/KDY/KDY/PACKAGE 17A",
+        "sheet_name": target_sheet,
         "province": val(5, 2) or "Central",
         "district": val(5, 6) or "Kandy",
         "ee_division": val(6, 2) or "Kandy EE",
         "ce_division": val(7, 2) or "Kandy CE",
         "electorate": val(8, 2) or "Kandy Electorate",
+        "project_name": val(4, 2) or "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT",
+        "contract_no": val(5, 11) or "RDA/DC/DRP/SLOPE/CP/KDY/KDY/PACKAGE 17A",
         "road_name": val(10, 2) or "Road Rehabilitation Section",
-        "road_class": val(11, 2) or "Class B",
-        "road_length_km": val(13, 2) if val(13, 2) and val(13, 2) != "0" else "4.2",
-        "proposed_width_m": "4.5"
+        "road_class_and_number": val(11, 2) or "Class B (B-124)",
+        "road_improvement_type": val(12, 2) or "Rehabilitation & Asphalt Concrete Surfacing",
+        "road_length": val(13, 2) if val(13, 2) and val(13, 2) != "0" else "4.20 km",
+        "avg_road_width_existing": "3.80 m",
+        "road_width_proposed": "4.50 m"
     }
 
     transport_distances = [
@@ -119,20 +135,24 @@ def get_detail_sheet_structure(sheet_name: str):
         r = rows[idx]
         if not r:
             continue
-        c0 = str(r[0]).strip() if r[0] is not None else ""
-        c1 = str(r[1]).strip() if len(r) > 1 and r[1] is not None else ""
+        c0 = str(r[0]).strip() if r[0] is not None and str(r[0]).strip() != "None" else ""
+        c1 = str(r[1]).strip() if len(r) > 1 and r[1] is not None and str(r[1]).strip() != "None" else ""
         
         if not c0 and not c1:
             continue
             
+        if "#REF!" in c0 or "#REF!" in c1 or "#NAME?" in c0 or "#NAME?" in c1:
+            continue
+
         unit = ""
         for cell_val in r[2:16]:
-            if str(cell_val).strip() in ["Sq.m", "Cu.m", "L.m", "Nos", "Mtr", "LS", "Km"]:
-                unit = str(cell_val).strip()
+            v = str(cell_val).strip() if cell_val is not None else ""
+            if v in ["Sq.m", "Cu.m", "L.m", "Nos", "Mtr", "LS", "Km", "m", "M", "Sqm", "Cum", "Lm", "No"]:
+                unit = v
                 break
                 
         is_header = False
-        if (c0 and not unit and c1) or (c1 and not unit and not c0.isdigit() and "." in c0 and len(c0) <= 6):
+        if (c0 and not unit and len(c0) <= 8 and ("." in c0 or c0.isdigit())) or (c1 and not c0 and not unit and c1.isupper() and len(c1) > 5):
             is_header = True
             
         items.append({
@@ -144,12 +164,12 @@ def get_detail_sheet_structure(sheet_name: str):
         })
 
     return {
-        "sheet_name": sheet_name,
+        "sheet_name": target_sheet,
         "metadata": metadata,
         "transport_distances": transport_distances,
         "surfaces": surfaces,
         "total_sscm_items": len(items),
-        "items": items[:60]
+        "items": items
     }
 
 class DetailSheetCreateRequest(BaseModel):
@@ -219,7 +239,6 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
         bottom=Side(style='thin', color='000000')
     )
     
-    # Set Column Widths
     col_widths = {
         'A': 8, 'B': 45, 'C': 12, 'D': 12, 'E': 8,
         'F': 12, 'G': 12, 'H': 8, 'I': 12, 'J': 12, 'K': 8,
@@ -239,17 +258,45 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     ws['A2'].font = sec_font
     ws['A2'].alignment = Alignment(horizontal="center")
 
-    # Section 1 Metadata
-    ws['A4'] = "Project Title:"
-    ws['B4'] = req.metadata.get("project_title", "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT")
-    ws['A5'] = "Contract No:"
-    ws['B5'] = req.metadata.get("contract_no", "RDA/DC/DRP/SLOPE/CP/KDY/KDY/PACKAGE 17A")
-    ws['A6'] = "Province:"
-    ws['B6'] = req.metadata.get("province", "Central")
-    ws['D6'] = "District:"
-    ws['E6'] = req.metadata.get("district", "Kandy")
+    # Section 1 Metadata (All 12 fields)
+    m = req.metadata or {}
+    ws['A4'] = "Province:"
+    ws['B4'] = m.get("province", "Central")
+    ws['D4'] = "District:"
+    ws['E4'] = m.get("district", "Kandy")
 
-    # Row 18: Road Surface Classification Headers (Matching User Image)
+    ws['A5'] = "EE Division:"
+    ws['B5'] = m.get("ee_division", "Kandy EE")
+    ws['D5'] = "CE Division:"
+    ws['E5'] = m.get("ce_division", "Kandy CE")
+
+    ws['A6'] = "Electorate/s:"
+    ws['B6'] = m.get("electorate", "Kandy Electorate")
+    ws['D6'] = "Contract Serial No:"
+    ws['E6'] = m.get("contract_no", "RDA/DC/DRP/SLOPE/CP/KDY/KDY/PACKAGE 17A")
+
+    ws['A7'] = "Project Name:"
+    ws['B7'] = m.get("project_name", "INCLUSIVE CONNECTIVITY & DEVELOPMENT PROJECT")
+
+    ws['A8'] = "Road Name:"
+    ws['B8'] = m.get("road_name", "Road Rehabilitation Section")
+
+    ws['A9'] = "Road Class and Number:"
+    ws['B9'] = m.get("road_class_and_number", "Class B (B-124)")
+
+    ws['A10'] = "Road Improvement Type:"
+    ws['B10'] = m.get("road_improvement_type", "Rehabilitation & Asphalt Concrete Surfacing")
+
+    ws['A11'] = "Road Length:"
+    ws['B11'] = m.get("road_length", "4.20 km")
+
+    ws['A12'] = "Avg. Road Width (Existing):"
+    ws['B12'] = m.get("avg_road_width_existing", "3.80 m")
+
+    ws['A13'] = "Road width (Proposed):"
+    ws['B13'] = m.get("road_width_proposed", "4.50 m")
+
+    # Row 18: Road Surface Classification Headers
     ws['B18'] = "Existing Road Section"
     ws['B18'].font = bold_font
     
@@ -307,7 +354,7 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     ws['K22'] = "m"
     ws['N22'] = "m"
 
-    # Row 28: LHS / RHS Sub-headers (Matching User Image)
+    # Row 28: LHS / RHS Sub-headers
     sub_headers = {
         'C28': 'LHS', 'D28': 'RHS',
         'F28': 'LHS', 'G28': 'RHS',
@@ -322,9 +369,7 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     # Populate Data Items Starting Row 24
     curr_row = 24
     for it in req.items:
-        # Category Banner Row (Yellow Bar across A to N)
         if it.is_header:
-            # If current row is row 28 (reserved for LHS/RHS), jump to row 29
             if curr_row == 28:
                 curr_row = 29
                 
@@ -335,7 +380,6 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             banner_cell.alignment = Alignment(horizontal="left", vertical="center")
             curr_row += 1
             
-            # Re-apply LHS / RHS sub-header row right after tree removal or category header if applicable
             if it.item_no == "2.2":
                 ws.cell(row=curr_row, column=3, value="LHS").alignment = Alignment(horizontal="center")
                 ws.cell(row=curr_row, column=4, value="RHS").alignment = Alignment(horizontal="center")
@@ -350,7 +394,6 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             ws.cell(row=curr_row, column=1, value=it.item_no).border = thin_border
             ws.cell(row=curr_row, column=2, value=it.description).border = thin_border
             
-            # Gravel Section Inputs (Cols C, D, E)
             c_cell = ws.cell(row=curr_row, column=3, value=it.gravel_lhs or 0)
             c_cell.fill = light_green_input
             c_cell.border = thin_border
@@ -363,7 +406,6 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             e_unit.fill = peach_fill
             e_unit.border = thin_border
             
-            # Tar / Asphalt Section Inputs (Cols F, G, H)
             f_cell = ws.cell(row=curr_row, column=6, value=it.asphalt_lhs or 0)
             f_cell.fill = light_green_input
             f_cell.border = thin_border
@@ -376,7 +418,6 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             h_unit.fill = blue_fill
             h_unit.border = thin_border
             
-            # Concrete Section Inputs (Cols I, J, K)
             i_cell = ws.cell(row=curr_row, column=9, value=it.concrete_lhs or 0)
             i_cell.fill = light_green_input
             i_cell.border = thin_border
@@ -389,7 +430,6 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             k_unit.fill = purple_fill
             k_unit.border = thin_border
             
-            # Interlock Section Inputs (Cols L, M, N)
             l_cell = ws.cell(row=curr_row, column=12, value=it.interlock_lhs or 0)
             l_cell.fill = light_green_input
             l_cell.border = thin_border
@@ -402,7 +442,6 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             n_unit.fill = interlock_fill
             n_unit.border = thin_border
             
-            # Grand Total Formula Column (Col O)
             o_tot = ws.cell(row=curr_row, column=15, value=f"=C{curr_row}+D{curr_row}+F{curr_row}+G{curr_row}+I{curr_row}+J{curr_row}+L{curr_row}+M{curr_row}")
             o_tot.font = Font(bold=True)
             o_tot.border = thin_border
