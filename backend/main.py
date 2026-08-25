@@ -146,8 +146,15 @@ def get_detail_sheet_structure(sheet_name: str):
                 unit = v
                 break
                 
+        # Category Yellow Banners have c0.count(".") <= 1 (e.g. 2.1, 2.2, 3.1, 3.3, 3.4, 4.1)
         is_header = False
-        if (c0 and not unit and len(c0) <= 8 and ("." in c0 or c0.isdigit())) or (c1 and not c0 and not unit and c1.isupper() and len(c1) > 5) or ("Clearing" in c1 and "Grubbing" in c1) or ("Removal of Trees" in c1) or ("Roadway Excavation" in c1 and c0 == "3.1"):
+        if c0 and not unit and c0.count(".") <= 1 and ("." in c0 or c0.isdigit()):
+            is_header = True
+            current_category = c1 if c1 else c0
+        elif c1 and not c0 and not unit and c1.isupper() and len(c1) > 5:
+            is_header = True
+            current_category = c1
+        elif ("Clearing" in c1 and "Grubbing" in c1) or ("Removal of Trees" in c1 and c0 == "2.2") or ("Roadway Excavation" in c1 and c0 == "3.1"):
             is_header = True
             current_category = c1 if c1 else c0
 
@@ -168,7 +175,7 @@ def get_detail_sheet_structure(sheet_name: str):
 
         # Check if Gravel section has N/A (e.g. Edge Widening for Gravel roads)
         gravel_is_na = False
-        if c1 in ["Total Length", "Avg.Width", "Avg.Depth"] and ("3.1.2" in current_category or idx in [48, 49, 50]):
+        if c1 in ["Total Length", "Avg.Width", "Avg.Depth"] and ("Edge Widening" in current_category or "3.1" in current_category or idx in [48, 49, 50]):
             gravel_is_na = True
 
         # Indentation level: Sub-properties (Total Length, Avg.Width, Depth) have empty Col A
@@ -500,7 +507,7 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
                 ws.cell(row=curr_row, column=13, value="RHS").alignment = Alignment(horizontal="center")
                 curr_row += 1
         elif it.is_sub_item_header:
-            # Item Header like 3.1.2 Edge Widening, 3.1.3 Shoulder Excavation
+            # Sub-item Header like 3.1.2 Edge Widening, 3.1.3 Shoulder Excavation
             ws.cell(row=curr_row, column=1, value=it.item_no).font = bold_font
             ws.cell(row=curr_row, column=1).border = thin_border
             ws.cell(row=curr_row, column=2, value=it.description).font = bold_font
