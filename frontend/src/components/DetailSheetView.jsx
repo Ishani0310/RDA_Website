@@ -165,11 +165,19 @@ export default function DetailSheetView() {
 
       const initialMap = {};
       (res.data.items || []).forEach(it => {
-        if (!it.is_header) {
-          initialMap[it.item_no + '_' + it.description] = {
+        if (!it.is_header && !it.is_sub_item_header) {
+          const desc = it.description || '';
+          const isEdgeWideningWidth = desc.includes('Avg.Width') && it.gravel_is_na;
+          const isEdgeWideningDepth = desc.includes('Avg.Depth') && it.gravel_is_na;
+          const isShoulderExcWidth = desc.includes('Avg.Width') && !it.gravel_is_na;
+          const isShoulderExcDepth = desc.includes('Depth') && !desc.includes('Avg') && !it.gravel_is_na;
+
+          initialMap[it.item_no + '_' + desc] = {
             val_single_gravel: 0, val_single_asphalt: 0, val_single_concrete: 0, val_single_interlock: 0,
-            gravel_lhs: 0, gravel_rhs: 0,
-            asphalt_lhs: 0, asphalt_rhs: 0,
+            gravel_lhs: desc.includes('Depth') && !it.gravel_is_na ? 0.150 : 0, 
+            gravel_rhs: desc.includes('Depth') && !it.gravel_is_na ? 0.150 : 0,
+            asphalt_lhs: isEdgeWideningWidth ? 0.2 : (isEdgeWideningDepth ? 0.150 : (isShoulderExcWidth ? 1 : (isShoulderExcDepth ? 0.100 : 0))), 
+            asphalt_rhs: isEdgeWideningWidth ? 0.2 : (isEdgeWideningDepth ? 0.150 : (isShoulderExcWidth ? 2 : (isShoulderExcDepth ? 0.100 : 0))),
             concrete_lhs: 0, concrete_rhs: 0,
             interlock_lhs: 0, interlock_rhs: 0
           };
@@ -263,13 +271,14 @@ export default function DetailSheetView() {
     setExportSuccess(false);
     try {
       const itemsPayload = (sheetData?.items || []).map(it => {
-        if (it.is_header) {
+        if (it.is_header || it.is_sub_item_header) {
           return {
             item_no: it.item_no,
             description: it.description,
             unit: '',
-            is_header: true,
-            is_single_value: it.is_single_value !== false
+            is_header: it.is_header,
+            is_sub_item_header: it.is_sub_item_header,
+            is_single_value: false
           };
         }
         const itemKey = it.item_no + '_' + it.description;
@@ -279,7 +288,10 @@ export default function DetailSheetView() {
           description: it.description,
           unit: it.unit,
           is_header: false,
+          is_sub_item_header: false,
+          is_sub_prop: it.is_sub_prop,
           is_single_value: it.is_single_value !== false,
+          gravel_is_na: it.gravel_is_na || (it.description || '').includes('Total Length') || (it.description || '').includes('Avg.Width') && it.gravel_is_na,
           val_single_gravel: m.val_single_gravel || 0,
           val_single_asphalt: m.val_single_asphalt || 0,
           val_single_concrete: m.val_single_concrete || 0,
@@ -364,7 +376,7 @@ export default function DetailSheetView() {
               <h2 className="text-xl font-bold text-white">RDA Detail Sheets (Road Data & Quantity Builder)</h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Single Value input for Clearing & Grubbing; Dual LHS/RHS inputs for Removal of Trees & Drains
+              3.1 Roadway Excavation, 3.1.1 Cut Slope Volume, 3.1.2 Edge Widening (N/A Gravel), & 3.1.3 Shoulder Excavation
             </p>
           </div>
 
@@ -863,7 +875,7 @@ export default function DetailSheetView() {
               <span>Section 3: SSCM Measurement Matrix ({filteredItems.length} Descriptions Loaded)</span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Single Value input for Clearing & Grubbing; Dual LHS/RHS inputs for Removal of Trees & Drains
+              3.1 Roadway Excavation: 3.1.1 Cut Slope Volume, 3.1.2 Edge Widening, 3.1.3 Shoulder Excavation
             </p>
           </div>
 
@@ -995,13 +1007,13 @@ export default function DetailSheetView() {
                 const itemNoStr = it.item_no || '';
 
                 if (it.is_header) {
-                  const isTreeCategory = descStr.includes("Removal of Trees") || descStr.includes("Trees") || itemNoStr === "2.2";
+                  const needsLhsRhsSubHeader = descStr.includes("Removal of Trees") || descStr.includes("Trees") || descStr.includes("Roadway Excavation") || descStr.includes("Excavation") || itemNoStr === "2.2" || itemNoStr === "3.1";
                   const secCode = itemNoStr ? itemNoStr.split('.')[0] : "2";
                   const sInfo = SECTION_DESCRIPTIONS[secCode];
 
                   return (
                     <React.Fragment key={idx}>
-                      {/* Category Yellow Banner Row */}
+                      {/* Category Yellow Banner Row (#FFFF00) */}
                       <tr className="bg-yellow-400 text-slate-950 font-black border-y-2 border-yellow-500 shadow-sm">
                         <td className="py-2.5 px-3 font-mono font-black text-xs border-r border-yellow-500">{itemNoStr || 'SEC'}</td>
                         <td colSpan={activeColCount - 1} className="py-2.5 px-3 text-xs uppercase tracking-wider font-extrabold text-slate-950">
@@ -1017,7 +1029,7 @@ export default function DetailSheetView() {
                       </tr>
 
                       {/* Sub-header Row ONLY for categories with LHS / RHS breakdown */}
-                      {isTreeCategory && (
+                      {needsLhsRhsSubHeader && (
                         <tr className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-[9px]">
                           <td colSpan={3} className="py-1.5 px-3 text-right font-bold text-amber-400 border-r border-slate-800 uppercase tracking-wider">
                             Section Entry Sub-Headers
@@ -1053,16 +1065,33 @@ export default function DetailSheetView() {
                   );
                 }
 
+                if (it.is_sub_item_header) {
+                  // Sub-item Header Row (e.g. 3.1.2 Edge Widening, 3.1.3 Shoulder Excavation)
+                  return (
+                    <tr key={idx} className="bg-slate-900/90 font-bold border-t border-slate-700">
+                      <td className="py-2 px-2 font-black text-amber-400 border-r border-slate-800 font-mono text-xs">
+                        {itemNoStr}
+                      </td>
+                      <td colSpan={activeColCount - 1} className="py-2 px-3 font-bold text-white text-xs">
+                        {descStr}
+                      </td>
+                    </tr>
+                  );
+                }
+
                 const itemKey = itemNoStr + '_' + descStr;
                 const m = itemMeasurements[itemKey] || {
                   val_single_gravel: 0, val_single_asphalt: 0, val_single_concrete: 0, val_single_interlock: 0,
-                  gravel_lhs: 0, gravel_rhs: 0,
+                  gravel_lhs: descStr.includes('Depth') && !it.gravel_is_na ? 0.150 : 0, 
+                  gravel_rhs: descStr.includes('Depth') && !it.gravel_is_na ? 0.150 : 0,
                   asphalt_lhs: 0, asphalt_rhs: 0,
                   concrete_lhs: 0, concrete_rhs: 0,
                   interlock_lhs: 0, interlock_rhs: 0
                 };
 
                 const isSingleValue = it.is_single_value || descStr.includes("Cumulative Area") || descStr.includes("Clearing");
+                const isGravelNA = it.gravel_is_na || (descStr.includes("Total Length") || descStr.includes("Avg.Width") || descStr.includes("Avg.Depth")) && it.gravel_is_na;
+                const isSubProp = it.is_sub_prop || (itemNoStr === "" && ["Total Length", "Avg.Width", "Avg.Depth", "Cumulative Length", "Depth"].includes(descStr));
 
                 if (isSingleValue) {
                   // SINGLE VALUE ROW (e.g. Clearing & Grubbing Cumulative Area) - ONE INPUT BOX PER SECTION
@@ -1075,9 +1104,9 @@ export default function DetailSheetView() {
                   return (
                     <tr key={idx} className="hover:bg-slate-800/40 transition-colors bg-amber-950/10">
                       <td className="py-2 px-2 font-bold text-amber-400 border-r border-slate-800 font-mono text-[11px]">
-                        {itemNoStr || '-'}
+                        {isSubProp ? '' : itemNoStr}
                       </td>
-                      <td className="py-2 px-3 font-bold text-slate-100 border-r border-slate-800 leading-relaxed text-xs">
+                      <td className={`py-2 px-3 font-bold text-slate-100 border-r border-slate-800 leading-relaxed text-xs ${isSubProp ? 'italic pl-6 text-slate-300 font-normal' : ''}`}>
                         {descStr}
                       </td>
                       <td className="py-2 px-2 text-center text-slate-400 border-r border-slate-800 font-semibold text-[10px]">
@@ -1160,8 +1189,8 @@ export default function DetailSheetView() {
                   );
                 }
 
-                // DUAL LHS / RHS INPUT ROW (e.g. Removal of Trees)
-                const gravelTotal = (m.gravel_lhs || 0) + (m.gravel_rhs || 0);
+                // DUAL LHS / RHS INPUT ROW (e.g. 3.1.1 Cut Slope Volume, 3.1.2 Sub-properties, 3.1.3 Sub-properties)
+                const gravelTotal = isGravelNA ? 0 : ((m.gravel_lhs || 0) + (m.gravel_rhs || 0));
                 const asphaltTotal = (m.asphalt_lhs || 0) + (m.asphalt_rhs || 0);
                 const concreteTotal = (m.concrete_lhs || 0) + (m.concrete_rhs || 0);
                 const interlockTotal = (m.interlock_lhs || 0) + (m.interlock_rhs || 0);
@@ -1170,9 +1199,9 @@ export default function DetailSheetView() {
                 return (
                   <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-2 px-2 font-bold text-amber-400 border-r border-slate-800 font-mono text-[11px]">
-                      {itemNoStr || '-'}
+                      {isSubProp ? '' : itemNoStr}
                     </td>
-                    <td className="py-2 px-3 font-medium text-slate-100 border-r border-slate-800 leading-relaxed text-xs">
+                    <td className={`py-2 px-3 font-medium text-slate-100 border-r border-slate-800 leading-relaxed text-xs ${isSubProp ? 'italic pl-6 text-slate-300 font-normal' : ''}`}>
                       {descStr}
                     </td>
                     <td className="py-2 px-2 text-center text-slate-400 border-r border-slate-800 font-semibold text-[10px]">
@@ -1183,28 +1212,34 @@ export default function DetailSheetView() {
                       ) : '-'}
                     </td>
 
-                    {/* Gravel LHS & RHS Inputs */}
+                    {/* Gravel LHS & RHS Inputs (or N/A cell if Gravel is not applicable like Edge Widening) */}
                     {visibleSections.gravel && (
-                      <>
-                        <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-amber-500/5">
-                          <input 
-                            type="number" 
-                            value={m.gravel_lhs || ''} 
-                            onChange={(e) => handleInputChange(itemKey, 'gravel_lhs', e.target.value)}
-                            placeholder="0"
-                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-amber-500 font-semibold"
-                          />
+                      isGravelNA ? (
+                        <td colSpan={2} className="py-1.5 px-2 text-center border-r border-slate-800 bg-slate-900/90 text-slate-500 font-bold text-xs italic">
+                          N/A
                         </td>
-                        <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-amber-500/5">
-                          <input 
-                            type="number" 
-                            value={m.gravel_rhs || ''} 
-                            onChange={(e) => handleInputChange(itemKey, 'gravel_rhs', e.target.value)}
-                            placeholder="0"
-                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-amber-500 font-semibold"
-                          />
-                        </td>
-                      </>
+                      ) : (
+                        <>
+                          <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-amber-500/5">
+                            <input 
+                              type="number" 
+                              value={m.gravel_lhs !== undefined ? m.gravel_lhs : ''} 
+                              onChange={(e) => handleInputChange(itemKey, 'gravel_lhs', e.target.value)}
+                              placeholder="0"
+                              className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-amber-500 font-semibold"
+                            />
+                          </td>
+                          <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-amber-500/5">
+                            <input 
+                              type="number" 
+                              value={m.gravel_rhs !== undefined ? m.gravel_rhs : ''} 
+                              onChange={(e) => handleInputChange(itemKey, 'gravel_rhs', e.target.value)}
+                              placeholder="0"
+                              className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-amber-500 font-semibold"
+                            />
+                          </td>
+                        </>
+                      )
                     )}
 
                     {/* Tar/Asphalt LHS & RHS Inputs */}
@@ -1213,7 +1248,7 @@ export default function DetailSheetView() {
                         <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-blue-500/5">
                           <input 
                             type="number" 
-                            value={m.asphalt_lhs || ''} 
+                            value={m.asphalt_lhs !== undefined ? m.asphalt_lhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'asphalt_lhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-blue-500 font-semibold"
@@ -1222,7 +1257,7 @@ export default function DetailSheetView() {
                         <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-blue-500/5">
                           <input 
                             type="number" 
-                            value={m.asphalt_rhs || ''} 
+                            value={m.asphalt_rhs !== undefined ? m.asphalt_rhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'asphalt_rhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-blue-500 font-semibold"
@@ -1237,7 +1272,7 @@ export default function DetailSheetView() {
                         <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-purple-500/5">
                           <input 
                             type="number" 
-                            value={m.concrete_lhs || ''} 
+                            value={m.concrete_lhs !== undefined ? m.concrete_lhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'concrete_lhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-purple-500 font-semibold"
@@ -1246,7 +1281,7 @@ export default function DetailSheetView() {
                         <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-purple-500/5">
                           <input 
                             type="number" 
-                            value={m.concrete_rhs || ''} 
+                            value={m.concrete_rhs !== undefined ? m.concrete_rhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'concrete_rhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-purple-500 font-semibold"
@@ -1261,7 +1296,7 @@ export default function DetailSheetView() {
                         <td className="py-1.5 px-1 text-center border-r border-slate-800/40 bg-emerald-500/5">
                           <input 
                             type="number" 
-                            value={m.interlock_lhs || ''} 
+                            value={m.interlock_lhs !== undefined ? m.interlock_lhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'interlock_lhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-emerald-500 font-semibold"
@@ -1270,7 +1305,7 @@ export default function DetailSheetView() {
                         <td className="py-1.5 px-1 text-center border-r border-slate-800 bg-emerald-500/5">
                           <input 
                             type="number" 
-                            value={m.interlock_rhs || ''} 
+                            value={m.interlock_rhs !== undefined ? m.interlock_rhs : ''} 
                             onChange={(e) => handleInputChange(itemKey, 'interlock_rhs', e.target.value)}
                             placeholder="0"
                             className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right font-mono text-slate-100 text-xs focus:border-emerald-500 font-semibold"

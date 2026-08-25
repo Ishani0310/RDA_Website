@@ -147,24 +147,43 @@ def get_detail_sheet_structure(sheet_name: str):
                 break
                 
         is_header = False
-        if (c0 and not unit and len(c0) <= 8 and ("." in c0 or c0.isdigit())) or (c1 and not c0 and not unit and c1.isupper() and len(c1) > 5) or ("Clearing" in c1 and "Grubbing" in c1) or ("Removal of Trees" in c1):
+        if (c0 and not unit and len(c0) <= 8 and ("." in c0 or c0.isdigit())) or (c1 and not c0 and not unit and c1.isupper() and len(c1) > 5) or ("Clearing" in c1 and "Grubbing" in c1) or ("Removal of Trees" in c1) or ("Roadway Excavation" in c1 and c0 == "3.1"):
             is_header = True
-            current_category = c1
-            
-        # Determine if single value row (like Clearing & Grubbing Cumulative Area) vs LHS/RHS row
-        is_single_value = True
-        if "Removal of Trees" in current_category or "Tree" in c1 or "Drain" in c1 or "LHS" in c1 or "RHS" in c1 or "Wall" in c1 or "Kerb" in c1:
-            is_single_value = False
+            current_category = c1 if c1 else c0
 
+        # Sub-header item rows (like 3.1.2 Edge Widening, 3.1.3 Shoulder Excavation)
+        is_sub_item_header = False
+        if c0 in ["3.1.2", "3.1.3"] or (c0 and not unit and c1 in ["Edge Widening", "Shoulder Excavation"]):
+            is_sub_item_header = True
+
+        # Determine if category needs LHS/RHS sub-headers (like 2.2 Removal of Trees, 3.1 Roadway Excavation, Drains, Retaining Walls)
+        needs_lhs_rhs = False
+        if "Removal of Trees" in current_category or "Trees" in current_category or "Roadway Excavation" in current_category or "Excavation" in current_category or "Drain" in current_category or "Wall" in current_category or "2.2" in current_category or "3.1" in current_category:
+            needs_lhs_rhs = True
+
+        # Check if single value row (like Clearing & Grubbing Cumulative Area) vs LHS/RHS row
+        is_single_value = not needs_lhs_rhs
         if "Cumulative Area" in c1 or "Clearing" in current_category:
             is_single_value = True
+
+        # Check if Gravel section has N/A (e.g. Edge Widening for Gravel roads)
+        gravel_is_na = False
+        if c1 in ["Total Length", "Avg.Width", "Avg.Depth"] and ("3.1.2" in current_category or idx in [48, 49, 50]):
+            gravel_is_na = True
+
+        # Indentation level: Sub-properties (Total Length, Avg.Width, Depth) have empty Col A
+        is_sub_prop = (c0 == "" and c1 in ["Total Length", "Avg.Width", "Avg.Depth", "Cumulative Length", "Depth"])
 
         items.append({
             "item_no": c0,
             "description": c1,
             "unit": unit,
             "is_header": is_header,
+            "is_sub_item_header": is_sub_item_header,
+            "is_sub_prop": is_sub_prop,
+            "needs_lhs_rhs": needs_lhs_rhs,
             "is_single_value": is_single_value,
+            "gravel_is_na": gravel_is_na,
             "row_idx": idx + 1
         })
 
@@ -200,7 +219,11 @@ class ExportItem(BaseModel):
     description: Optional[str] = ""
     unit: Optional[str] = ""
     is_header: bool = False
+    is_sub_item_header: bool = False
+    is_sub_prop: bool = False
     is_single_value: bool = True
+    needs_lhs_rhs: bool = False
+    gravel_is_na: bool = False
     val_single_gravel: Optional[float] = 0.0
     val_single_asphalt: Optional[float] = 0.0
     val_single_concrete: Optional[float] = 0.0
@@ -236,10 +259,13 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     green_bar_fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
     green_fill = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
     light_green_input = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+    na_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
     
     bold_font = Font(name="Calibri", size=10, bold=True, color="000000")
     normal_font = Font(name="Calibri", size=10, color="000000")
+    italic_font = Font(name="Calibri", size=10, italic=True, color="000000")
     banner_font = Font(name="Calibri", size=11, bold=True, color="000000")
+    na_font = Font(name="Calibri", size=10, bold=True, color="7F7F7F")
     
     thin_border = Border(
         left=Side(style='thin', color='000000'),
@@ -249,7 +275,7 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     )
     
     col_widths = {
-        'A': 6, 'B': 45, 'C': 12, 'D': 12, 'E': 8,
+        'A': 8, 'B': 45, 'C': 12, 'D': 12, 'E': 8,
         'F': 12, 'G': 12, 'H': 8, 'I': 12, 'J': 12, 'K': 8,
         'L': 12, 'M': 12, 'N': 8, 'O': 14
     }
@@ -455,9 +481,6 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
     curr_row = 24
     for it in req.items:
         if it.is_header:
-            if curr_row == 28:
-                curr_row = 29
-                
             ws.merge_cells(start_row=curr_row, start_column=1, end_row=curr_row, end_column=15)
             banner_cell = ws.cell(row=curr_row, column=1, value=f"{it.item_no}  {it.description}")
             banner_cell.fill = yellow_banner_fill
@@ -465,8 +488,8 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
             banner_cell.alignment = Alignment(horizontal="left", vertical="center")
             curr_row += 1
             
-            # Sub-headers LHS/RHS ONLY for categories like Removal of Trees (Row 28 in screenshot)
-            if "Removal of Trees" in it.description or "Trees" in it.description or "2.2" in it.item_no:
+            # Sub-headers LHS/RHS for categories like Removal of Trees (2.2), Roadway Excavation (3.1), Drains, Retaining Walls
+            if "Removal of Trees" in it.description or "Roadway Excavation" in it.description or "Trees" in it.description or "Excavation" in it.description or "2.2" in it.item_no or "3.1" in it.item_no:
                 ws.cell(row=curr_row, column=3, value="LHS").alignment = Alignment(horizontal="center")
                 ws.cell(row=curr_row, column=4, value="RHS").alignment = Alignment(horizontal="center")
                 ws.cell(row=curr_row, column=6, value="LHS").alignment = Alignment(horizontal="center")
@@ -476,13 +499,41 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
                 ws.cell(row=curr_row, column=12, value="LHS").alignment = Alignment(horizontal="center")
                 ws.cell(row=curr_row, column=13, value="RHS").alignment = Alignment(horizontal="center")
                 curr_row += 1
+        elif it.is_sub_item_header:
+            # Item Header like 3.1.2 Edge Widening, 3.1.3 Shoulder Excavation
+            ws.cell(row=curr_row, column=1, value=it.item_no).font = bold_font
+            ws.cell(row=curr_row, column=1).border = thin_border
+            ws.cell(row=curr_row, column=2, value=it.description).font = bold_font
+            ws.cell(row=curr_row, column=2).border = thin_border
+            for col_idx in range(3, 16):
+                ws.cell(row=curr_row, column=col_idx).border = thin_border
+            curr_row += 1
         else:
-            ws.cell(row=curr_row, column=1, value=it.item_no).border = thin_border
-            ws.cell(row=curr_row, column=2, value=it.description).border = thin_border
+            # Regular input row or sub-property row
+            item_no_val = "" if it.is_sub_prop else it.item_no
+            ws.cell(row=curr_row, column=1, value=item_no_val).border = thin_border
             
-            # Check if this row is a Single Value item (like Row 25 Clearing & Grubbing Cumulative Area)
-            if it.is_single_value or "Cumulative Area" in it.description or "Clearing" in it.description:
-                # Gravel Section Single Input (Merged C & D)
+            desc_cell = ws.cell(row=curr_row, column=2, value=it.description)
+            desc_cell.border = thin_border
+            if it.is_sub_prop:
+                desc_cell.font = italic_font
+                desc_cell.alignment = Alignment(indent=2)
+
+            # Check if Gravel is N/A (e.g. Edge Widening for Gravel Section as shown in user image)
+            if it.gravel_is_na or "Edge Widening" in it.description:
+                ws.merge_cells(start_row=curr_row, start_column=3, end_row=curr_row, end_column=4)
+                na_cell = ws.cell(row=curr_row, column=3, value="N/A")
+                na_cell.fill = na_fill
+                na_cell.font = na_font
+                na_cell.alignment = Alignment(horizontal="center")
+                na_cell.border = thin_border
+                ws.cell(row=curr_row, column=4).border = thin_border
+                
+                e_unit = ws.cell(row=curr_row, column=5, value=it.unit)
+                e_unit.fill = peach_fill
+                e_unit.border = thin_border
+            elif it.is_single_value or "Cumulative Area" in it.description:
+                # Single Value Gravel Input (Merged C & D)
                 ws.merge_cells(start_row=curr_row, start_column=3, end_row=curr_row, end_column=4)
                 c_cell = ws.cell(row=curr_row, column=3, value=it.val_single_gravel or it.gravel_lhs or 0)
                 c_cell.fill = light_green_input
@@ -493,48 +544,8 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
                 e_unit = ws.cell(row=curr_row, column=5, value=it.unit)
                 e_unit.fill = peach_fill
                 e_unit.border = thin_border
-                
-                # Asphalt Section Single Input (Merged F & G)
-                ws.merge_cells(start_row=curr_row, start_column=6, end_row=curr_row, end_column=7)
-                f_cell = ws.cell(row=curr_row, column=6, value=it.val_single_asphalt or it.asphalt_lhs or 0)
-                f_cell.fill = light_green_input
-                f_cell.alignment = Alignment(horizontal="center")
-                f_cell.border = thin_border
-                ws.cell(row=curr_row, column=7).border = thin_border
-                
-                h_unit = ws.cell(row=curr_row, column=8, value=it.unit)
-                h_unit.fill = blue_fill
-                h_unit.border = thin_border
-                
-                # Concrete Section Single Input (Merged I & J)
-                ws.merge_cells(start_row=curr_row, start_column=9, end_row=curr_row, end_column=10)
-                i_cell = ws.cell(row=curr_row, column=9, value=it.val_single_concrete or it.concrete_lhs or 0)
-                i_cell.fill = light_green_input
-                i_cell.alignment = Alignment(horizontal="center")
-                i_cell.border = thin_border
-                ws.cell(row=curr_row, column=10).border = thin_border
-                
-                k_unit = ws.cell(row=curr_row, column=11, value=it.unit)
-                k_unit.fill = purple_fill
-                k_unit.border = thin_border
-                
-                # Interlock Section Single Input (Merged L & M)
-                ws.merge_cells(start_row=curr_row, start_column=12, end_row=curr_row, end_column=13)
-                l_cell = ws.cell(row=curr_row, column=12, value=it.val_single_interlock or it.interlock_lhs or 0)
-                l_cell.fill = light_green_input
-                l_cell.alignment = Alignment(horizontal="center")
-                l_cell.border = thin_border
-                ws.cell(row=curr_row, column=13).border = thin_border
-                
-                n_unit = ws.cell(row=curr_row, column=14, value=it.unit)
-                n_unit.fill = interlock_fill
-                n_unit.border = thin_border
-                
-                o_tot = ws.cell(row=curr_row, column=15, value=f"=C{curr_row}+F{curr_row}+I{curr_row}+L{curr_row}")
-                o_tot.font = Font(bold=True)
-                o_tot.border = thin_border
             else:
-                # LHS / RHS Dual Input item (like Removal of Trees, Drains, etc.)
+                # LHS / RHS Dual Input Gravel
                 c_cell = ws.cell(row=curr_row, column=3, value=it.gravel_lhs or 0)
                 c_cell.fill = light_green_input
                 c_cell.border = thin_border
@@ -546,46 +557,56 @@ def export_detail_sheet_to_excel(req: ExportDetailSheetRequest):
                 e_unit = ws.cell(row=curr_row, column=5, value=it.unit)
                 e_unit.fill = peach_fill
                 e_unit.border = thin_border
-                
-                f_cell = ws.cell(row=curr_row, column=6, value=it.asphalt_lhs or 0)
-                f_cell.fill = light_green_input
-                f_cell.border = thin_border
-                
-                g_cell = ws.cell(row=curr_row, column=7, value=it.asphalt_rhs or 0)
-                g_cell.fill = light_green_input
-                g_cell.border = thin_border
-                
-                h_unit = ws.cell(row=curr_row, column=8, value=it.unit)
-                h_unit.fill = blue_fill
-                h_unit.border = thin_border
-                
-                i_cell = ws.cell(row=curr_row, column=9, value=it.concrete_lhs or 0)
-                i_cell.fill = light_green_input
-                i_cell.border = thin_border
-                
-                j_cell = ws.cell(row=curr_row, column=10, value=it.concrete_rhs or 0)
-                j_cell.fill = light_green_input
-                j_cell.border = thin_border
-                
-                k_unit = ws.cell(row=curr_row, column=11, value=it.unit)
-                k_unit.fill = purple_fill
-                k_unit.border = thin_border
-                
-                l_cell = ws.cell(row=curr_row, column=12, value=it.interlock_lhs or 0)
-                l_cell.fill = light_green_input
-                l_cell.border = thin_border
-                
-                m_cell = ws.cell(row=curr_row, column=13, value=it.interlock_rhs or 0)
-                m_cell.fill = light_green_input
-                m_cell.border = thin_border
-                
-                n_unit = ws.cell(row=curr_row, column=14, value=it.unit)
-                n_unit.fill = interlock_fill
-                n_unit.border = thin_border
-                
+
+            # Asphalt/Tar Section
+            f_cell = ws.cell(row=curr_row, column=6, value=it.asphalt_lhs or 0)
+            f_cell.fill = light_green_input
+            f_cell.border = thin_border
+            
+            g_cell = ws.cell(row=curr_row, column=7, value=it.asphalt_rhs or 0)
+            g_cell.fill = light_green_input
+            g_cell.border = thin_border
+            
+            h_unit = ws.cell(row=curr_row, column=8, value=it.unit)
+            h_unit.fill = blue_fill
+            h_unit.border = thin_border
+
+            # Concrete Section
+            i_cell = ws.cell(row=curr_row, column=9, value=it.concrete_lhs or 0)
+            i_cell.fill = light_green_input
+            i_cell.border = thin_border
+            
+            j_cell = ws.cell(row=curr_row, column=10, value=it.concrete_rhs or 0)
+            j_cell.fill = light_green_input
+            j_cell.border = thin_border
+            
+            k_unit = ws.cell(row=curr_row, column=11, value=it.unit)
+            k_unit.fill = purple_fill
+            k_unit.border = thin_border
+
+            # Interlock Section
+            l_cell = ws.cell(row=curr_row, column=12, value=it.interlock_lhs or 0)
+            l_cell.fill = light_green_input
+            l_cell.border = thin_border
+            
+            m_cell = ws.cell(row=curr_row, column=13, value=it.interlock_rhs or 0)
+            m_cell.fill = light_green_input
+            m_cell.border = thin_border
+            
+            n_unit = ws.cell(row=curr_row, column=14, value=it.unit)
+            n_unit.fill = interlock_fill
+            n_unit.border = thin_border
+
+            # Total Column O
+            if it.gravel_is_na or "Edge Widening" in it.description:
+                o_tot = ws.cell(row=curr_row, column=15, value=f"=F{curr_row}+G{curr_row}+I{curr_row}+J{curr_row}+L{curr_row}+M{curr_row}")
+            elif it.is_single_value:
+                o_tot = ws.cell(row=curr_row, column=15, value=f"=C{curr_row}+F{curr_row}+I{curr_row}+L{curr_row}")
+            else:
                 o_tot = ws.cell(row=curr_row, column=15, value=f"=C{curr_row}+D{curr_row}+F{curr_row}+G{curr_row}+I{curr_row}+J{curr_row}+L{curr_row}+M{curr_row}")
-                o_tot.font = Font(bold=True)
-                o_tot.border = thin_border
+            
+            o_tot.font = Font(bold=True)
+            o_tot.border = thin_border
 
             curr_row += 1
 
